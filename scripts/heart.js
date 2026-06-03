@@ -48,9 +48,12 @@ import { createWorktree, removeWorktree, mergeWorktree, resolveConflict, setMock
 import { runAube as aubeHand, runDeps as depResolveHand } from './sandbox/aube.js';
 import { runReparto as repartoHand } from './sandbox/reparto.js';
 import { runWilliam as williamHand } from './sandbox/william.js';
+import { PROJECT_ROOT } from './lib/target.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..');
+// REPO_ROOT = the PRODUCT's repo (project/), NOT the forge. The sandbox worktrees
+// are created AND branch-deleted on THIS git, and the notes/demo live under it.
+const REPO_ROOT = PROJECT_ROOT;
 
 // Point the SHARED notes store at THIS module's import-time sandbox dir. The diana
 // re-imports heart fresh per tmpdir but notes.js is a static (shared) import, so

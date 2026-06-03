@@ -33,9 +33,13 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { sandboxRoot, setSandboxRoot } from './notes.js';
+import { PROJECT_ROOT } from '../lib/target.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..', '..');
+// REPO_ROOT = the PRODUCT's repo (project/), NOT the forge — `git worktree add`,
+// the `sandbox/<prog>` branches and the merges all happen on THIS .git. This is
+// the git that gets dirtied and branch-deleted by the sandbox, by design.
+const REPO_ROOT = PROJECT_ROOT;
 
 // Point the SHARED notes module at THIS module's import-time sandbox dir. notes.js
 // is a static import (one shared instance), so re-pointing it here keeps the

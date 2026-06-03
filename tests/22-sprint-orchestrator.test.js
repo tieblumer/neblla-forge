@@ -34,7 +34,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawnSync, execFileSync } from 'child_process';
-import { ROOT } from './_harness.js';
+import { ROOT } from './_root.js';   // pins NEBLLA_PROJECT_ROOT=forge BEFORE the next import resolves it
 import { sweepDoneSprints, gitTrackedAndClean } from '../scripts/release-and-test.js';
 
 export const needsServer = false;

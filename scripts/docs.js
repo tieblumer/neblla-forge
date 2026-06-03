@@ -56,9 +56,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { sandboxRoot, setSandboxRoot, listNotes, readNote } from './sandbox/notes.js';
 import { setMockGit, removeWorktree } from './sandbox/worktrees.js';
+import { PROJECT_ROOT } from './lib/target.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..');
+// REPO_ROOT = the PRODUCT (project/), NOT the forge — the sandbox worktrees and
+// the impl sprint this docs pass produces live on the product's repo.
+const REPO_ROOT = PROJECT_ROOT;
 
 // Point the SHARED notes/worktrees stores at THIS module's import-time sandbox dir
 // (same reason as heart.js: notes.js is a static, shared import that may have

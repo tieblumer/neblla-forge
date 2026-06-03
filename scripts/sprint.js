@@ -77,9 +77,12 @@ import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PROJECT_ROOT } from './lib/target.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
+// ROOT = the PRODUCT this sprint builds (project/), NOT the forge. Sprint state,
+// the diana gate (`node tests/run.js`), worker cwd and version all ride this.
+const ROOT = PROJECT_ROOT;
 const SPRINTS_DIR = path.join(ROOT, 'backbone', 'sprints');
 const VERDICT_FILE = path.join(SPRINTS_DIR, '.verdict.json');
 const HOTFIX_FILE = path.join(SPRINTS_DIR, '.hotfix-needed.json');

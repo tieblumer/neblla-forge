@@ -100,7 +100,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';   // Part 4: launch docs.js as a real process (fail-closed gate)
-import { ROOT } from './_harness.js';
+import { ROOT } from './_root.js';   // forge root + pins NEBLLA_PROJECT_ROOT=forge for the machinery under test
 
 export const needsServer = false;
 

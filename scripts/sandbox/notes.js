@@ -21,9 +21,12 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PROJECT_ROOT } from '../lib/target.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..', '..');
+// REPO_ROOT = the PRODUCT (project/), NOT the forge — the versioned notes default
+// to <product>/backbone/sandbox. NEBLLA_SANDBOX_DIR still overrides for tests.
+const REPO_ROOT = PROJECT_ROOT;
 
 // The note states. `estado:` may only ever be one of these (setNoteState throws
 // otherwise). libre → en-proceso → finalizada is the happy path; revision /

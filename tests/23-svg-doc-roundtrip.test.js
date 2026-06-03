@@ -15,7 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { ROOT } from './_harness.js';
+import { ROOT } from './_root.js';
 import { toSvg, svgToDoc } from '../scripts/svg-doc.js';
 
 export const needsServer = false;

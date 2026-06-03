@@ -45,9 +45,12 @@ import { execFileSync, spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PROJECT_ROOT } from './lib/target.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
+// ROOT = the PRODUCT we build/release (project/), NOT the forge this script lives
+// in. Every git / `node tests/run.js` / version / changelog op below rides this.
+const ROOT = PROJECT_ROOT;
 const VERSION_FILE = path.join(ROOT, 'public', 'version.txt');
 const FAILURE_LOG  = path.join(ROOT, '.test-failure.log');
 const SPRINTS_DIR  = path.join(ROOT, 'backbone', 'sprints');
