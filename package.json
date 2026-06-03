@@ -4,6 +4,7 @@
   "description": "The forge: reusable build machinery (sandbox heart, sprint orchestrator, release pipeline, mesa de dibujo, SVG tooling) used to construct projects that live under project/.",
   "type": "module",
   "scripts": {
+    "forge": "node scripts/forge.js",
     "sandbox": "node scripts/heart.js",
     "sandbox:demo": "node scripts/heart.js --demo",
     "mesa": "node scripts/mesa.js",

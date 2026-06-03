@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Forge</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c232d;
+    --border: #2a323d;
+    --text: #e6edf3;
+    --muted: #8b97a6;
+    --accent: #4f9cff;
+    --accent-ink: #06101f;
+    --tie: #2a4d7a;
+    --other: #20262e;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    display: grid; grid-template-columns: 280px 1fr 300px; height: 100vh;
+    transition: grid-template-columns .18s ease;
+  }
+  body.left-collapsed                     { grid-template-columns: 44px 1fr 300px; }
+  body.right-collapsed                    { grid-template-columns: 280px 1fr 44px; }
+  body.left-collapsed.right-collapsed     { grid-template-columns: 44px 1fr 44px; }
+  .col { height: 100vh; display: flex; flex-direction: column; min-height: 0; }
+  .col-left { background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; }
+  /* plegada: solo queda la cabecera con el botón; el resto se esconde */
+  body.left-collapsed .col-left .col-head { padding: 14px 0; justify-content: center; }
+  body.left-collapsed .col-left .col-head > span,
+  body.left-collapsed .col-left #newCycle,
+  body.left-collapsed .col-left .new-btn,
+  body.left-collapsed .col-left .chat-list { display: none; }
+  .col-center { background: var(--bg); }
+  .col-right { background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; }
+  body.right-collapsed .col-right .col-head { padding: 14px 0; justify-content: center; }
+  body.right-collapsed .col-right .col-head > span,
+  body.right-collapsed .col-right .col-head .soon,
+  body.right-collapsed .col-right .placeholder-pad { display: none; }
+
+  .col-head {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+    font-weight: 600; font-size: 13px; letter-spacing: .02em;
+    display: flex; align-items: center; gap: 8px; justify-content: space-between;
+    background: inherit; flex: 0 0 auto;
+  }
+  .cycle-btn {
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    background: transparent; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px 9px;
+  }
+  .cycle-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  .collapse-btn {
+    font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
+    background: transparent; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px 7px; flex: 0 0 auto;
+  }
+  .collapse-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  .new-btn {
+    margin: 12px 16px; padding: 10px 12px; width: calc(100% - 32px);
+    background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px;
+    font-weight: 600; font-size: 14px; cursor: pointer;
+  }
+  .new-btn:hover { filter: brightness(1.08); }
+  .new-btn:active { transform: translateY(1px); }
+
+  .chat-list { list-style: none; margin: 0; padding: 4px 8px 16px; }
+  .chat-item {
+    padding: 10px 12px; border-radius: 8px; cursor: pointer; margin-bottom: 2px;
+    border: 1px solid transparent;
+  }
+  .chat-item:hover { background: var(--panel-2); }
+  .chat-item.active { background: var(--panel-2); border-color: var(--border); }
+  .chat-item .title { font-weight: 500; }
+  .chat-item .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .empty { color: var(--muted); padding: 24px 16px; text-align: center; font-size: 13px; }
+
+  /* CENTRO: hilo arriba (scroll), compositor abajo */
+  .thread { flex: 1 1 auto; overflow-y: auto; padding: 20px 24px; }
+  .thread .placeholder { color: var(--muted); padding: 24px 0; }
+
+  /* árbol de mensajes (estilo reddit) */
+  .node { margin: 0 0 10px; }
+  .who { font-size: 11px; color: var(--muted); margin: 0 2px 3px; }
+  .bubble {
+    padding: 9px 13px; border-radius: 12px; background: var(--other);
+    white-space: pre-wrap; word-wrap: break-word; display: inline-block; max-width: 100%;
+  }
+  .bubble.tie { background: var(--tie); }
+  /* contenedor de hijos: por defecto SIN sangría (la respuesta única va justo
+     debajo, misma columna). Si la madre tiene varias respuestas, .branch sangra
+     +1 unidad a todo el grupo y los marca con la línea del hilo. */
+  .children { }
+  .children.branch { padding-left: 22px; margin-left: 4px; border-left: 2px solid var(--border); }
+
+  /* barra de acciones por mensaje (todas disponibles de principio) */
+  .actions { display: flex; gap: 6px; margin: 5px 2px 2px; flex-wrap: wrap; }
+  .act {
+    font: inherit; font-size: 11px; font-weight: 600; border-radius: 6px; padding: 2px 9px;
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+  }
+  .act.live { cursor: pointer; }
+  .act.live:hover { color: var(--text); border-color: var(--accent); }
+  .act.dead { cursor: not-allowed; opacity: .45; }       /* 🚫 al pasar por encima */
+
+  .reply-banner {
+    font-size: 12px; color: var(--muted); margin-bottom: 8px; display: none;
+  }
+  .reply-banner b { color: var(--accent); }
+  .reply-banner a { color: var(--accent); cursor: pointer; margin-left: 10px; text-decoration: underline; }
+
+  /* compositor fijo abajo */
+  .composer { flex: 0 0 auto; border-top: 1px solid var(--border); padding: 12px 16px 14px; background: var(--panel); }
+  .composer textarea {
+    width: 100%; resize: none; min-height: 64px; max-height: 180px;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; font: inherit; outline: none;
+  }
+  .composer textarea:focus { border-color: var(--accent); }
+  .composer textarea:disabled { opacity: .5; }
+
+  .tools { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .tool {
+    padding: 7px 14px; border-radius: 8px; font: inherit; font-weight: 600; font-size: 13px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+  }
+  .tool.live { cursor: pointer; border-color: var(--accent); color: var(--accent); }
+  .tool.live:hover { background: rgba(79,156,255,.12); }
+  .tool.live:active { transform: translateY(1px); }
+  .tool.dead { cursor: not-allowed; color: var(--muted); opacity: .65; }   /* 🚫 al pasar por encima */
+  .tool:disabled { cursor: not-allowed; }
+
+  .soon {
+    font-size: 11px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; font-weight: 500;
+  }
+  .placeholder-pad { color: var(--muted); padding: 24px 16px; font-size: 13px; }
+
+  /* bloque "pensando": fantasma con barrido (shimmer) mientras el headless piensa.
+     El brillo cruza siempre en el mismo sentido (izq → der). */
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .node.thinking { margin: 0 0 12px; }
+  .bubble.skeleton-wrap { width: 240px; max-width: 70%; padding: 11px 13px; }
+  .skeleton {
+    height: 11px; border-radius: 6px; margin: 0 0 8px;
+    background: linear-gradient(90deg, #20262e 25%, #313c49 50%, #20262e 75%);
+    background-size: 200% 100%; animation: shimmer 1.3s linear infinite;
+  }
+  .skeleton:last-child { margin-bottom: 0; }
+</style>
+</head>
+<body>
+  <!-- IZQUIERDA: conversaciones -->
+  <aside class="col col-left">
+    <div class="col-head">
+      <button class="collapse-btn" id="toggleLeft" title="Plegar / desplegar la columna">«</button>
+      <span>Conversaciones</span>
+      <button class="cycle-btn" id="newCycle" title="Borra todas las conversaciones y abre el backlog. Requiere el producto limpio.">Nuevo ciclo</button>
+    </div>
+    <button class="new-btn" id="newChat">+ Nueva conversación</button>
+    <ul class="chat-list" id="chatList"></ul>
+  </aside>
+
+  <!-- CENTRO: hilo + compositor -->
+  <main class="col col-center">
+    <div class="col-head" id="centerHead">Chat</div>
+    <div class="thread" id="thread">
+      <div class="placeholder">Crea o elige una conversación a la izquierda.</div>
+    </div>
+    <div class="composer">
+      <div class="reply-banner" id="replyBanner"></div>
+      <textarea id="input" placeholder="Escribe aquí…" disabled></textarea>
+      <div class="tools" id="tools">
+        <button class="tool live" id="btnCharlar" disabled>Charlar</button>
+        <button class="tool dead" disabled title="todavía no funciona">Preguntar</button>
+        <button class="tool dead" disabled title="todavía no funciona">Pedir</button>
+        <button class="tool dead" disabled title="todavía no funciona">Challenge</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- DERECHA: tareas (andamio) -->
+  <aside class="col col-right">
+    <div class="col-head">
+      <span>Tareas <span class="soon">próximamente</span></span>
+      <button class="collapse-btn" id="toggleRight" title="Plegar / desplegar la columna">»</button>
+    </div>
+    <div class="placeholder-pad">Aquí vivirán las tareas que nazcan de las conversaciones.</div>
+  </aside>
+
+<script>
+  const listEl = document.getElementById('chatList');
+  const threadEl = document.getElementById('thread');
+  const headEl = document.getElementById('centerHead');
+  const inputEl = document.getElementById('input');
+  const btnCharlar = document.getElementById('btnCharlar');
+  const banner = document.getElementById('replyBanner');
+  let active = null;
+  let lastCount = -1;
+  let lastPending = false;
+  let pollTimer = null;
+  // "pending": acabamos de enviar y esperamos la respuesta de un headless.
+  // baseline = nº de mensajes NO-tie en ese momento; cuando crezca, ya llegó.
+  let pending = false;
+  let pendingBaseline = 0;
+  let otherCount = 0;
+  let replyTarget = null; // id del mensaje al que responde el compositor (null = raíz)
+
+  // acciones disponibles por mensaje. live=funciona hoy; dead=todavía no (🚫).
+  const ACTIONS = [
+    { key: 'responder', label: 'Responder', live: true },
+    { key: 'challenge', label: 'Challenge', live: true },
+    { key: 'preguntar', label: 'Preguntar', live: false },
+    { key: 'pedir', label: 'Pedir', live: false },
+  ];
+
+  function fmtDate(iso) { try { return new Date(iso).toLocaleString('es-ES'); } catch { return iso || ''; } }
+
+  async function loadList() {
+    const chats = await (await fetch('/api/chats')).json();
+    listEl.innerHTML = '';
+    if (!chats.length) {
+      listEl.innerHTML = '<li class="empty">Todavía no hay conversaciones.<br>Crea la primera.</li>';
+      return;
+    }
+    for (const c of chats) {
+      const li = document.createElement('li');
+      li.className = 'chat-item' + (c.id === active ? ' active' : '');
+      li.innerHTML = '<div class="title"></div><div class="meta"></div>';
+      li.querySelector('.title').textContent = c.title;
+      li.querySelector('.meta').textContent = '#' + c.id + ' · ' + (c.type || '');
+      li.onclick = () => openChat(c.id);
+      listEl.appendChild(li);
+    }
+  }
+
+  // construye el nodo (burbuja + acciones + contenedor de hijos) recursivamente.
+  // isProng = este nodo es UNA de varias respuestas (un diente de una bifurcación
+  // de arriba). Si lo es, su continuación se sangra para no caer en la misma línea
+  // vertical que sus hermanas.
+  function renderNode(m, byParent, isProng) {
+    const node = document.createElement('div');
+    node.className = 'node';
+
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.textContent = m.author + ' · ' + m.type + (m.replyTo ? ' · ↳ #' + m.replyTo : '') + '  (#' + m.id + ')';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble ' + (m.author === 'tie' ? 'tie' : 'other');
+    bubble.textContent = m.text;
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    for (const a of ACTIONS) {
+      const b = document.createElement('button');
+      b.className = 'act ' + (a.live ? 'live' : 'dead');
+      b.textContent = a.label;
+      if (a.live) b.onclick = () => doAction(a.key, m);
+      else { b.disabled = true; b.title = 'todavía no funciona'; }
+      actions.appendChild(b);
+    }
+
+    node.appendChild(who);
+    node.appendChild(bubble);
+    node.appendChild(actions);
+
+    const kids = byParent.get(m.id) || [];
+    if (kids.length) {
+      const c = document.createElement('div');
+      // sangra +1 unidad si hay bifurcación aquí (>1 hijo) O si este nodo es ya un
+      // diente de una bifurcación de arriba (isProng): así la continuación de una
+      // rama no comparte línea vertical con sus hermanas. Cadena lineal sin ramas
+      // por encima → hijo único cuelga en la misma columna, como antes.
+      const branch = kids.length > 1 || isProng;
+      c.className = 'children' + (branch ? ' branch' : '');
+      const kidsAreProngs = kids.length > 1;
+      for (const k of kids) c.appendChild(renderNode(k, byParent, kidsAreProngs));
+      node.appendChild(c);
+    }
+    return node;
+  }
+
+  // fantasma con barrido que se cuela al final del hilo mientras se espera respuesta.
+  function makeThinkingNode() {
+    const node = document.createElement('div');
+    node.className = 'node thinking';
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.textContent = 'pensando…';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble other skeleton-wrap';
+    for (const w of [72, 92, 54]) {
+      const line = document.createElement('div');
+      line.className = 'skeleton';
+      line.style.width = w + '%';
+      bubble.appendChild(line);
+    }
+    node.appendChild(who);
+    node.appendChild(bubble);
+    return node;
+  }
+
+  function renderThread(chat) {
+    const msgs = chat.messages || [];
+    headEl.textContent = chat.title + '  ·  #' + chat.id;
+    if (!msgs.length) {
+      threadEl.innerHTML = pending
+        ? ''
+        : '<div class="placeholder">Hilo vacío. Escribe abajo y pulsa Charlar.</div>';
+      if (pending) threadEl.appendChild(makeThinkingNode());
+      return;
+    }
+    const present = new Set(msgs.map((m) => m.id));
+    const byParent = new Map();
+    for (const m of msgs) {
+      const k = (m.replyTo != null && present.has(m.replyTo)) ? m.replyTo : 'root';
+      if (!byParent.has(k)) byParent.set(k, []);
+      byParent.get(k).push(m);
+    }
+    const roots = byParent.get('root') || [];
+    threadEl.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    const rootsAreProngs = roots.length > 1;
+    for (const r of roots) frag.appendChild(renderNode(r, byParent, rootsAreProngs));
+    threadEl.appendChild(frag);
+    if (pending) threadEl.appendChild(makeThinkingNode());
+    threadEl.scrollTop = threadEl.scrollHeight;
+  }
+
+  function doAction(key, m) {
+    if (key === 'responder') { setReplyTarget(m.id); }
+    else if (key === 'challenge') { challenge(m.id); }
+  }
+
+  function setReplyTarget(id) {
+    replyTarget = id;
+    banner.style.display = 'block';
+    banner.innerHTML = 'Respondiendo a <b>#' + id + '</b><a id="cancelReply">cancelar</a>';
+    banner.querySelector('#cancelReply').onclick = clearReplyTarget;
+    inputEl.focus();
+  }
+  function clearReplyTarget() {
+    replyTarget = null;
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+  }
+
+  async function challenge(targetId) {
+    if (!active) return;
+    const res = await fetch('/api/chats/' + active + '/challenge', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetId }),
+    });
+    if (!res.ok) { alert('No se pudo lanzar el challenge.'); return; }
+    pending = true; pendingBaseline = otherCount; // fantasma hasta que William conteste
+    lastCount = -1; refreshThread(); // William aparecerá colgando del mensaje
+  }
+
+  async function refreshThread() {
+    if (!active) return;
+    const res = await fetch('/api/chats/' + active);
+    if (!res.ok) return;
+    const chat = await res.json();
+    const msgs = chat.messages || [];
+    otherCount = msgs.filter((m) => m.author !== 'tie').length;
+    // llegó una respuesta de un headless → apaga el fantasma.
+    if (pending && otherCount > pendingBaseline) pending = false;
+    const n = msgs.length;
+    if (n !== lastCount || pending !== lastPending) {
+      lastCount = n; lastPending = pending; renderThread(chat);
+    }
+  }
+
+  function openChat(id) {
+    active = id;
+    lastCount = -1;
+    lastPending = false;
+    pending = false;
+    otherCount = 0;
+    clearReplyTarget();
+    inputEl.disabled = false;
+    btnCharlar.disabled = false;
+    refreshThread();
+    loadList();
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(refreshThread, 1500); // ve llegar las respuestas de los headless
+  }
+
+  async function charlar() {
+    const text = inputEl.value.trim();
+    if (!text || !active) return;
+    btnCharlar.disabled = true;
+    const res = await fetch('/api/chats/' + active + '/charla', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, replyTo: replyTarget }),
+    });
+    btnCharlar.disabled = false;
+    if (!res.ok) { alert('No se pudo enviar.'); return; }
+    inputEl.value = '';
+    clearReplyTarget();
+    pending = true; pendingBaseline = otherCount; // fantasma hasta que conteste el headless
+    lastCount = -1;
+    refreshThread();
+  }
+
+  btnCharlar.onclick = charlar;
+  // Enter envía, Shift+Enter salto de línea.
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); charlar(); }
+  });
+
+  document.getElementById('newCycle').onclick = async () => {
+    if (!confirm('Nuevo ciclo: borra TODAS las conversaciones y abre el backlog.\nSolo funciona si el producto (project/) está limpio.\n\n¿Seguir?')) return;
+    const res = await fetch('/api/cycle/new', { method: 'POST' });
+    if (res.status === 409) {
+      const j = await res.json();
+      let msg = j.error || 'No se pudo.';
+      if (j.pending && j.pending.length) msg += '\n\nPendiente:\n' + j.pending.slice(0, 20).join('\n');
+      alert(msg);
+      return;
+    }
+    if (!res.ok) { alert('No se pudo empezar el ciclo.'); return; }
+    const j = await res.json();
+    await loadList();
+    openChat(j.chat.id); // el sondeo mostrará la apertura de Iris al llegar
+  };
+
+  document.getElementById('newChat').onclick = async () => {
+    const res = await fetch('/api/chats', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'tarea' }),
+    });
+    if (!res.ok) { alert('No se pudo crear la conversación.'); return; }
+    const c = await res.json();
+    await loadList();
+    openChat(c.id);
+  };
+
+  // plegado de la columna izquierda (recuerda el estado entre recargas)
+  const toggleLeft = document.getElementById('toggleLeft');
+  function applyLeftState() {
+    const collapsed = localStorage.getItem('forge.leftCollapsed') === '1';
+    document.body.classList.toggle('left-collapsed', collapsed);
+    toggleLeft.textContent = collapsed ? '»' : '«';
+    toggleLeft.title = collapsed ? 'Desplegar la columna' : 'Plegar la columna';
+  }
+  toggleLeft.onclick = () => {
+    const collapsed = !document.body.classList.contains('left-collapsed');
+    localStorage.setItem('forge.leftCollapsed', collapsed ? '1' : '0');
+    applyLeftState();
+  };
+  applyLeftState();
+
+  const toggleRight = document.getElementById('toggleRight');
+  function applyRightState() {
+    const collapsed = localStorage.getItem('forge.rightCollapsed') === '1';
+    document.body.classList.toggle('right-collapsed', collapsed);
+    toggleRight.textContent = collapsed ? '«' : '»';
+    toggleRight.title = collapsed ? 'Desplegar la columna' : 'Plegar la columna';
+  }
+  toggleRight.onclick = () => {
+    const collapsed = !document.body.classList.contains('right-collapsed');
+    localStorage.setItem('forge.rightCollapsed', collapsed ? '1' : '0');
+    applyRightState();
+  };
+  applyRightState();
+
+  loadList();
+</script>
+</body>
+</html>

@@ -5,6 +5,10 @@ project/
 node_modules
 *.log
 
+# forge UI (npm run forge) — las conversaciones son demasiado efímeras para git;
+# solo generarían ruido. Cada sprint arranca limpio. Viven solo en el working tree.
+sprint/chats/
+
 # forge machinery transient artifacts — never committed.
 scripts/_work/
 .wt/
