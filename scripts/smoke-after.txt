@@ -1,0 +1,97 @@
+◇ injected env (24) from .env.local,.env // tip: ⌘ override existing { override: true }
+
+================ url1 ================
+url: https://neblla.com/apps/4U/index.html
+title: "Chess" | body html len: 41378 | SDK connected: true
+=> clean
+
+================ url2 ================
+url: https://neblla.com/apps/6N/index.html
+title: "Neblla Drawing Board Example" | body html len: 18086 | SDK connected: true
+=> clean
+
+================ url3 ================
+url: https://neblla.com/apps/36N/index.html
+title: "Tetris Multiplayer" | body html len: 20247 | SDK connected: false
+--- pageerror ---
+   TypeError: Cannot read properties of undefined (reading '0')
+    at broadcastState (https://neblla.com/apps/36N/index.html:707:57)
+    at <anonymous> (https://neblla.com/apps/36N/index.html:907:9)
+    at <anonymous> (https://neblla.com/connect/app/36N:436:48)
+    at fireEvent (https://neblla.com/connect/app/36N:436:34)
+    at <anonymous> (https://neblla.com/connect/app/36N:2432:11)
+    at <anonymous> (https://neblla.com/connect/app/36N:2431:20)
+    at Emitter.emit (https://neblla.com/connect/download/socket/a705f80ecbdf7268a945b23bbd7c10b5:627:22)
+    at emitEvent (https://neblla.com/connect/download/socket/a705f80ecbdf7268a945b23bbd7c10b5:4089:31)
+    at onevent (https://neblla.com/connect/download/socket/a705f80ecbdf7268a945b23bbd7c10b5:4068:14)
+    at onpacket (https://neblla.com/connect/download/socket/a705f80ecbdf7268a945b23bbd7c10b5:4036:16)
+
+================ url4 ================
+url: https://neblla.com/apps/KX/index.html
+title: "Donkey Kong - Multiplayer" | body html len: 14594 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url5 ================
+url: https://neblla.com/apps/UL/index.html
+title: "Live Map" | body html len: 18880 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url6 ================
+url: https://neblla.com/apps/RD/index.html
+title: "Dónde Estás" | body html len: 16961 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url7 ================
+url: https://neblla.com/apps/T7/index.html
+title: "Festival Galicia 🎶" | body html len: 10669 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url8 ================
+url: https://neblla.com/apps/3MR/index.html
+title: "Transfer P2P" | body html len: 25192 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url9 ================
+url: https://neblla.com/apps/3N6/index.html
+title: "test" | body html len: 1207 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url10 ================
+url: https://neblla.com/apps/3C4/index.html
+title: "Pinta y Adivina" | body html len: 21570 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url11 ================
+url: https://neblla.com/apps/359/index.html
+title: "¿Quién es Quién?" | body html len: 39370 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url12 ================
+url: https://neblla.com/apps/8G/index.html
+title: "🐺" | body html len: 52125 | SDK connected: true
+=> clean
+
+================ url13 ================
+url: https://neblla.com/apps/3JJ/index.html
+title: "Ahorcado Multijugador" | body html len: 36986 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url14 ================
+url: https://neblla.com/apps/3LC/index.html
+title: "Constellation Conquest" | body html len: 14679 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url15 ================
+url: https://neblla.com/apps/59/index.html
+title: "Neblla — Dev Console" | body html len: 14441 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url16 ================
+url: https://neblla.com/apps/MR/index.html
+title: "Damas en Línea" | body html len: 14487 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)
+
+================ url17 ================
+url: https://neblla.com/apps/33F/index.html
+title: "Gym Tracker" | body html len: 19296 | SDK connected: false
+=> clean (but SDK did not connect within 11000ms)

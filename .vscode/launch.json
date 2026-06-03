@@ -1,0 +1,49 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "HTML Builder (watch)",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/jobs/html-builder.js"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "API 3000",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/app.js"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "WEB 5000",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "args": [
+        "5000"
+      ],
+      "program": "${workspaceFolder}/app.js"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Quota Playground",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/app.js",
+      "console": "integratedTerminal",
+      "serverReadyAction": {
+        "pattern": "Server running on port ([0-9]+)",
+        "uriFormat": "http://localhost:%s/admin/quota",
+        "action": "openExternally"
+      }
+    }
+  ]
+}

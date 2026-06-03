@@ -1,0 +1,32 @@
+# neblla-forge (the machinery). The product it builds lives in project/ and is its
+# OWN git repo (github.com/tieblumer/neblla.git) — the forge must never track it.
+project/
+
+node_modules
+*.log
+
+# forge machinery transient artifacts — never committed.
+scripts/_work/
+.wt/
+.bitacora-*.txt
+
+# sprint director (scripts/sprint.js) transients
+backbone/sprints/.verdict.json
+backbone/sprints/.hotfix-needed.json
+backbone/sprints/.coherence-advisory.md
+backbone/sprints/*.state.json
+backbone/sprints/*.state.json.tmp-*
+
+# sandbox heart (scripts/heart.js) transients — the NOTES live in the working tree
+# only (gitignored), seeded into worktrees by the heart, never via git.
+backbone/sandbox/.heart.json
+backbone/sandbox/.heart.log
+backbone/sandbox/.drain-requested
+backbone/sandbox/.sandbox-drained
+backbone/sandbox/.worktree-commands.json
+backbone/sandbox/**/*.tmp-*
+backbone/sandbox/.demo/
+backbone/sandbox/notas/
+
+# product secrets backup — never track
+neblla-env-backup/

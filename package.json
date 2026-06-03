@@ -1,0 +1,25 @@
+{
+  "name": "neblla-forge",
+  "version": "1.0.0",
+  "description": "The forge: reusable build machinery (sandbox heart, sprint orchestrator, release pipeline, mesa de dibujo, SVG tooling) used to construct projects that live under project/.",
+  "type": "module",
+  "scripts": {
+    "sandbox": "node scripts/heart.js",
+    "sandbox:demo": "node scripts/heart.js --demo",
+    "mesa": "node scripts/mesa.js",
+    "sprint": "node scripts/docs.js",
+    "release": "node scripts/release-and-test.js",
+    "test": "node tests/run.js"
+  },
+  "author": "Tie Blumer",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

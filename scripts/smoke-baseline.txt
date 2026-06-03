@@ -1,0 +1,128 @@
+◇ injected env (24) from .env.local,.env // tip: ⌁ auth for agents [www.vestauth.com]
+
+================ UL ================
+url: https://ce998854.neblla-apps.pages.dev/UL/index.html
+title: "Live Map" | body html len: 18876 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ T7 ================
+url: https://08b6840a.neblla-apps.pages.dev/T7/index.html
+title: "Festival Galicia 🎶" | body html len: 10668 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ RD ================
+url: https://562e9fbc.neblla-apps.pages.dev/RD/index.html
+title: "Dónde Estás" | body html len: 16960 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ MR ================
+url: https://c3d5f402.neblla-apps.pages.dev/MR/index.html
+title: "Damas en Línea" | body html len: 12165 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+--- requestfailed ---
+   GET https://cdn.jsdelivr.net/npm/neblla@latest/dist/neblla.min.js — net::ERR_BLOCKED_BY_ORB
+
+================ KX ================
+url: https://5cce80cf.neblla-apps.pages.dev/KX/index.html
+title: "Donkey Kong - Multiplayer" | body html len: 14616 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ 8G ================
+url: https://31ef6c5c.neblla-apps.pages.dev/8G/index.html
+title: "🐺" | body html len: 51848 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+   Failed to load resource: the server responded with a status of 404 ()
+--- requestfailed ---
+   GET https://31ef6c5c.neblla-apps.pages.dev/connect/app/8G — net::ERR_ABORTED
+
+================ 6N ================
+url: https://d4e43d0d.neblla-apps.pages.dev/6N/index.html
+title: "Neblla Drawing Board Example" | body html len: 17744 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+   Failed to load resource: the server responded with a status of 404 ()
+--- requestfailed ---
+   GET https://d4e43d0d.neblla-apps.pages.dev/connect/app/6N — net::ERR_ABORTED
+
+================ 4U ================
+url: https://127eefe3.neblla-apps.pages.dev/4U/index.html
+title: "Chess" | body html len: 41193 | SDK connected: true
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ 3N6 ================
+url: https://1717b65a.neblla-apps.pages.dev/3N6/index.html
+title: "test" | body html len: 1197 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ 3MR ================
+url: https://d0545b55.neblla-apps.pages.dev/3MR/index.html
+title: "Transfer P2P" | body html len: 25189 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ 3LC ================
+url: https://bda28d34.neblla-apps.pages.dev/3LC/index.html
+title: "Constellation Conquest" | body html len: 14539 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ 3JJ ================
+url: https://2839f46d.neblla-apps.pages.dev/3JJ/index.html
+title: "Ahorcado Multijugador" | body html len: 36786 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ 3GQ ================
+url: https://571abbc1.neblla-apps.pages.dev/3GQ/index.html
+title: "test" | body html len: 1104 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ 3C4 ================
+url: https://bbd02eb5.neblla-apps.pages.dev/3C4/index.html
+title: "Pinta y Adivina" | body html len: 21346 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ 36N ================
+url: https://d924ddd1.neblla-apps.pages.dev/36N/index.html
+title: "Tetris Multiplayer" | body html len: 20254 | SDK connected: false
+--- console.error ---
+   Failed to load resource: net::ERR_CONNECTION_REFUSED
+   Failed to load resource: the server responded with a status of 404 ()
+--- requestfailed ---
+   GET http://localhost:3000/connect/app/36N — net::ERR_CONNECTION_REFUSED
+
+================ 359 ================
+url: https://1a2f5120.neblla-apps.pages.dev/359/index.html
+title: "¿Quién es Quién?" | body html len: 39235 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ 33F ================
+url: https://eb49807b.neblla-apps.pages.dev/33F/index.html
+title: "Gym Tracker" | body html len: 18993 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+--- requestfailed ---
+   GET https://neblla.com/sdk.js — net::ERR_BLOCKED_BY_ORB
+
+================ 3UL ================
+no CF url on this app (never frozen?)
+
+================ 59 ================
+url: https://b21b0e11.neblla-apps.pages.dev/59/index.html
+title: "Neblla — Dev Console" | body html len: 14392 | SDK connected: false
+--- console.error ---
+   Failed to load resource: the server responded with a status of 404 ()
+
+================ 73 ================
+no CF url on this app (never frozen?)
