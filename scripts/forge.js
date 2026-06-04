@@ -588,15 +588,31 @@ app.post('/api/chats/:id/charla', (req, res) => {
   if (!chat) return res.status(404).json({ error: 'conversación no encontrada' });
 
   const text = req.body && req.body.text;
-  if (!text || !String(text).trim()) {
-    return res.status(400).json({ error: 'falta el texto' });
-  }
+  const hasText = text != null && String(text).trim();
+
   // replyTo opcional: si Tie responde a un mensaje concreto, su turno cuelga de él
   // (rama); sin replyTo es un mensaje raíz nuevo.
   let parent = null;
   if (req.body.replyTo != null) {
     const pid = Number(req.body.replyTo);
     if ((chat.messages || []).some((m) => m.id === pid)) parent = pid;
+  }
+
+  // ── Modo PROACTIVO: input VACÍO + bloque seleccionado. Iris arranca la charla
+  // sobre ese bloque por iniciativa propia (qué es, qué hace, dudas), sin que Tie
+  // teclee nada. NO se crea turno de Tie: la respuesta de Iris cuelga del bloque.
+  if (!hasText) {
+    if (parent == null) {
+      return res.status(400).json({ error: 'falta el texto o un bloque seleccionado' });
+    }
+    const target = (chat.messages || []).find((m) => m.id === parent);
+    const scope = ACTION_SCOPES.includes(req.body && req.body.scope) ? req.body.scope : 'mensaje';
+    launchHeadless({
+      chatId: id,
+      prompt: charlaPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, target, scope) }),
+      extraEnv: { FORGE_REPLY_TO: String(parent), FORGE_MSG_TYPE: 'charla', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'iris' },
+    });
+    return res.status(202).json({ pendingParent: parent, scope, spawned: true });
   }
 
   let tieMsg;

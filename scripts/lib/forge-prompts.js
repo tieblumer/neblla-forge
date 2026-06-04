@@ -78,7 +78,32 @@ function direccionArr(steer) {
 }
 
 // ── Iris — la charla informal (migrado de forge.js) ──────────────────────────
-export function charlaPrompt({ threadText }) {
+// `focoText` (opcional) = modo PROACTIVO: Tie seleccionó un bloque pero NO escribió
+// nada; Iris arranca la charla sobre ese bloque por iniciativa propia.
+export function charlaPrompt({ threadText, focoText }) {
+  if (focoText) {
+    return [
+      'Eres Iris, la CTO de Neblla, en una charla informal con Tie (el CEO) dentro',
+      'del forge. Esto es una CHARLA: responde breve, claro y cálido, al grano.',
+      '',
+      'El hilo de la conversación hasta ahora:',
+      '',
+      threadText,
+      '',
+      'Tie ha SELECCIONADO un bloque pero NO ha escrito nada: quiere que ARRANQUES tú',
+      'la charla sobre él, por iniciativa propia. Míralo y abre conversación: qué es,',
+      'qué hace, qué dudas te despierta o qué propondrías. No esperes una pregunta',
+      'suya — la pregunta la pones tú.',
+      '',
+      focoText,
+      '',
+      AL_GRANO,
+      '',
+      SOLO_LECTURA,
+      '',
+      CIERRE_CONTESTAR,
+    ].join('\n');
+  }
   return [
     'Eres Iris, la CTO de Neblla, en una charla informal con Tie (el CEO) dentro',
     'del forge. Esto es una CHARLA: responde breve, claro y cálido, al grano.',

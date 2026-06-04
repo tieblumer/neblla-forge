@@ -1089,11 +1089,14 @@
   async function charlar() {
     if (editTarget != null) return confirmEdit();
     const text = inputEl.value.trim();
-    if (!text || !active) return;
+    if (!active) return;
+    // input vacío SÍ vale si hay un bloque seleccionado: Iris arranca la charla
+    // sobre él por iniciativa propia. Sin texto y sin rey no hay nada que hacer.
+    if (!text && selectedId == null) return;
     btnCharlar.disabled = true;
     const res = await fetch('/api/chats/' + active + '/charla', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, replyTo: selectedId }),
+      body: JSON.stringify({ text, replyTo: selectedId, scope }),
     });
     btnCharlar.disabled = false;
     if (!res.ok) { alert('No se pudo enviar.'); return; }
