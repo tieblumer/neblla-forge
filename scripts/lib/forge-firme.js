@@ -4,12 +4,14 @@
  * El proceso entero es el **CICLO**, con FASES en orden que se pintan arriba como
  * una miga de pan con la fase actual iluminada:
  *
- *     Spike  >  Grooming  >  Sprint  >  QA
+ *     Spike  >  Grooming  >  Sprint  >  QA  >  Cierre
  *
  *   - Spike    — exploración desechable (el antiguo "sandbox", taller de usar y tirar).
  *   - Grooming — planificar: los 4 apóstoles, Anselmo (biblia), Ana Liz (diana); Lina.
  *   - Sprint   — construir: Miguel (el release —subir— une con QA).
  *   - QA       — vigilar producción: Otto.
+ *   - Cierre   — finalizar el ciclo: recibo de release verde + sellado. Es una fase
+ *                más del recorrido (se navega con las flechas), NO un botón aparte.
  *   - Hot Fix  — RAMA condicional: si QA falla, vuelve a Miguel; NO va en la línea recta.
  *
  * El mando de transporte tiene 4 acciones (avanzar / retroceder / pausar / reanudar)
@@ -27,6 +29,7 @@ export const PHASES = [
   { key: 'grooming', label: 'Grooming', pasos: ['apostoles', 'biblia', 'diana'] },
   { key: 'sprint',   label: 'Sprint',   pasos: ['build'] },
   { key: 'qa',       label: 'QA',       pasos: ['release', 'otto'] },
+  { key: 'cierre',   label: 'Cierre',   pasos: ['recibo', 'sellado'] },
   { key: 'hotfix',   label: 'Hot Fix',  pasos: ['fix'], branch: true },
 ];
 

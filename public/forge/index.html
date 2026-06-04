@@ -50,8 +50,9 @@
 
   /* ── BARRA DEL CICLO (F21): un SENDERO que se lee de izquierda a derecha ────
      IZQUIERDA: el objetivo (forge/producto), separado del viaje.
-     CENTRO: el carril del viaje — Nuevo ciclo › [fases] › Finalizar ciclo, con
+     CENTRO: el carril del viaje — Nuevo ciclo › [fases … Cierre], con
              ◀ Retroceder / Avanzar ▶ como únicos botones; debajo, el modelo.
+             "Cierre" es la última fase del recorrido, NO una puerta de salida.
      DERECHA: los mandos que no son el viaje (Pausar). */
   .cycle-bar {
     grid-column: 1 / -1; grid-row: 1;
@@ -93,8 +94,8 @@
   }
   .bc-sep { color: var(--border); font-size: 14px; padding: 0 2px; user-select: none; }
 
-  /* las dos PUERTAS-parada: NO son fases ni botones de acción; son paradas con
-     ajustes dentro. Borde punteado cálido + engranaje para que se lean distintas. */
+  /* la PUERTA-parada de entrada ("Nuevo ciclo"): NO es una fase ni un botón de
+     acción; es una parada con ajustes dentro. Borde punteado cálido + engranaje. */
   .gate { position: relative; }
   .gate-stop {
     font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
@@ -109,7 +110,6 @@
   }
   .gate-pop.open { display: block; }
   #gateNew .gate-pop { left: 0; }
-  #gateFin .gate-pop { right: 0; }
   .gate-pop h4 { margin: 0 0 4px; font-size: 13px; }
   .gate-pop p { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
   .gate-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -130,7 +130,6 @@
     background: #b3162a; color: #fff; border: 0; border-radius: 8px; padding: 8px 10px;
   }
   .gate-danger:hover { filter: brightness(1.1); }
-  .gate-scaffold { font-size: 11px; color: var(--muted); font-style: italic; }
 
   /* pie del carril: el combo de modelos, abajo-derecha pero DENTRO del carril */
   .rail-foot { display: flex; align-items: center; gap: 6px; align-self: flex-end; }
@@ -415,7 +414,7 @@
       <div class="target-branch" id="targetBranch"></div>
     </div>
 
-    <!-- CENTRO: el carril del viaje (Nuevo ciclo › fases › Finalizar ciclo) -->
+    <!-- CENTRO: el carril del viaje (Nuevo ciclo › fases … Cierre) -->
     <div class="bar-center">
       <div class="rail" id="rail">
         <!-- puerta de ENTRADA: una parada con ajustes (NO un botón de acción) -->
@@ -440,16 +439,8 @@
         <button class="tp-btn" id="btnBack" title="Retroceder a la fase anterior (corregir el rumbo)">◀</button>
         <div class="breadcrumb" id="breadcrumb"></div>
         <button class="tp-btn" id="btnAdvance" title="Avanzar a la fase siguiente (comprueba que se puede y mueve)">▶</button>
-        <span class="rail-sep">›</span>
-        <!-- puerta de SALIDA: la otra parada con ajustes -->
-        <div class="gate" id="gateFin">
-          <button class="gate-stop" id="gateFinBtn" title="Abrir los ajustes de cierre del ciclo">⚙ Finalizar ciclo</button>
-          <div class="gate-pop" id="popFin">
-            <h4>Finalizar ciclo</h4>
-            <p>Cierra el ciclo y deja el carril listo para el siguiente.</p>
-            <div class="gate-scaffold">Andamio: el cierre real (recibo + sellado) se cablea más adelante.</div>
-          </div>
-        </div>
+        <!-- "Cierre" ya NO es una puerta de salida: es la última fase del recorrido
+             (Spike › … › QA › Cierre), se navega con las flechas como las demás. -->
       </div>
       <!-- pie del carril: el combo de modelos, abajo-derecha pero dentro del carril -->
       <div class="rail-foot">
@@ -1539,18 +1530,17 @@
     btnWand.disabled = false;
   };
 
-  // ── las dos PUERTAS-parada del carril: abren un popover de ajustes ──────────
-  // Una sola abierta a la vez; clic fuera la cierra. NO son botones de acción.
+  // ── la PUERTA-parada de entrada del carril: abre un popover de ajustes ──────
+  // Clic fuera la cierra. NO es un botón de acción. (La salida "Cierre" ya no es
+  // una puerta: es la última fase del recorrido, se navega con las flechas.)
   const popNew = document.getElementById('popNew');
-  const popFin = document.getElementById('popFin');
-  function closeGates() { popNew.classList.remove('open'); popFin.classList.remove('open'); }
+  function closeGates() { popNew.classList.remove('open'); }
   function toggleGate(pop) {
     const willOpen = !pop.classList.contains('open');
     closeGates();
     if (willOpen) pop.classList.add('open');
   }
   document.getElementById('gateNewBtn').onclick = (e) => { e.stopPropagation(); syncNewGate(); toggleGate(popNew); };
-  document.getElementById('gateFinBtn').onclick = (e) => { e.stopPropagation(); toggleGate(popFin); };
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.gate')) closeGates();
   });
