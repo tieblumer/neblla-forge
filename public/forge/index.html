@@ -822,6 +822,15 @@
       const si = document.createElement('span'); si.className = 'tarea-ico' + (s.estado === 'error' ? ' rojo' : s.estado === 'enMaster' ? ' verde' : '');
       si.textContent = s.icon;
       const sn = document.createElement('span'); sn.className = 'sname'; sn.textContent = s.name;
+      // el CARRIL de la subtarea, en el rollover: qué le toca, hasta dónde, qué no.
+      const al = s.alcance;
+      if (al && (al.archivos?.length || al.frontera || al.noTocar?.length)) {
+        const parts = [];
+        if (al.archivos?.length) parts.push('toca: ' + al.archivos.join(', '));
+        if (al.frontera) parts.push('hasta: ' + al.frontera);
+        if (al.noTocar?.length) parts.push('NO toca: ' + al.noTocar.join(', '));
+        se.title = parts.join('\n');
+      }
       se.append(si, sn);
       subsEl.appendChild(se);
     }

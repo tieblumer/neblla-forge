@@ -53,6 +53,7 @@ const LEGACY = [
   '23-svg-doc-roundtrip',
   '24-sandbox-heart',
   '25-tarea-estado',
+  '26-trocear',
 ];
 
 // Backbone battery files live in tests/backbone/ as <domain>.test.js (skip _*).

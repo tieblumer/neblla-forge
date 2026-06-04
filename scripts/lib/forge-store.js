@@ -254,7 +254,7 @@ export function listTareas(root) {
     .sort((a, b) => (a.num || 0) - (b.num || 0));
 }
 
-export function createTarea(root, { title, body, fromChat } = {}) {
+export function createTarea(root, { title, body, fromChat, subtareas } = {}) {
   let files = [];
   try { files = fs.readdirSync(tareasDir(root)); } catch {}
   let max = 0;
@@ -271,6 +271,10 @@ export function createTarea(root, { title, body, fromChat } = {}) {
     fromChat: fromChat || null,
     createdAt: new Date().toISOString(),
   };
+  // Si Aubé partió la tarea en carriles paralelos, se guardan aquí; el motor
+  // (forge-estado.js) deriva de ellos el estado del padre. Sin partir → se omite
+  // y el motor sintetiza la única subtarea `main` de alcance completo.
+  if (Array.isArray(subtareas) && subtareas.length > 1) tarea.subtareas = subtareas;
   atomicWrite(path.join(tareasDir(root), id + '.json'), JSON.stringify(tarea, null, 2) + '\n');
   return tarea;
 }

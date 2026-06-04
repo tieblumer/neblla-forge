@@ -35,7 +35,9 @@ import { createMergeEngine } from './lib/forge-merge.js';
 import {
   charlaPrompt, williamChallengePrompt, anselmoPrompt, aubePrompt,
   stevensPrompt, miyagiPrompt, discutirPrompt, miguelPrompt, mergeReviewerPrompt,
+  parseSubtareasBloque,
 } from './lib/forge-prompts.js';
+import { troceaTarea } from './lib/forge-trocear.js';
 import { resolveProjectRoot } from './lib/target.js';
 
 const PROJECT_ROOT = resolveProjectRoot();
@@ -849,12 +851,14 @@ app.get('/api/tareas', (_req, res) => {
 app.post('/api/tareas', (req, res) => {
   const { fromChat } = req.body || {};
   let { title, body } = req.body || {};
+  let aubeText = null;
   // si no llega cuerpo pero sí un chat, lo saco del mensaje vivo de Aubé.
   if ((!body || !String(body).trim()) && fromChat) {
     const chat = readChat(ROOT, fromChat);
     const aube = (chat?.messages || []).find((m) => m.author === 'aube');
     if (aube) {
-      const lines = String(aube.text).split('\n');
+      aubeText = String(aube.text);
+      const lines = aubeText.split('\n');
       if (!title) title = lines[0];
       body = lines.slice(1).join('\n').trim() || aube.text;
     }
@@ -862,8 +866,18 @@ app.post('/api/tareas', (req, res) => {
   if ((!title || !String(title).trim()) && (!body || !String(body).trim())) {
     return res.status(400).json({ error: 'no hay de qué crear la tarea (ni texto ni mensaje de Aubé)' });
   }
+  // El cerebro de Aubé: si su mensaje trae un bloque ```subtareas y los carriles NO
+  // se pisan, la tarea nace partida en paralelo; si colisionan (o no hay bloque),
+  // troceaTarea devuelve la única `main` (default seguro). Probamos el cuerpo y el
+  // texto crudo de Aubé por si el bloque quedó fuera del cuerpo recortado.
+  let subtareas;
+  const propuesta = parseSubtareasBloque(body) || parseSubtareasBloque(aubeText || '');
+  if (propuesta) {
+    const fallo = troceaTarea(propuesta);
+    if (fallo.troceada) subtareas = fallo.subtareas;
+  }
   try {
-    res.status(201).json(createTarea(ROOT, { title, body, fromChat }));
+    res.status(201).json(createTarea(ROOT, { title, body, fromChat, subtareas }));
   } catch (e) {
     res.status(500).json({ error: 'no se pudo crear la tarea: ' + e.message });
   }

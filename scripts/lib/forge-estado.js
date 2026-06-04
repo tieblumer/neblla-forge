@@ -64,7 +64,11 @@ export function subtareasDe(tarea) {
   if (arr && arr.length) {
     return arr.map((s, i) => {
       const estado = ESTADOS[s && s.estado] ? s.estado : 'pendiente';
-      return { name: (s && s.name) || (i === 0 ? 'main' : 'sub-' + (i + 1)), estado, icon: iconOf(estado) };
+      const out = { name: (s && s.name) || (i === 0 ? 'main' : 'sub-' + (i + 1)), estado, icon: iconOf(estado) };
+      // el ALCANCE (carril) viaja al front si lo trae: archivos/frontera/noTocar.
+      // Lo escribe Aubé al partir (forge-trocear.js); el motor solo lo transporta.
+      if (s && s.alcance && typeof s.alcance === 'object') out.alcance = s.alcance;
+      return out;
     });
   }
   const estado = mainEstado(t);

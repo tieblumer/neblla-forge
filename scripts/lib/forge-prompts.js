@@ -166,6 +166,12 @@ export function anselmoPrompt({ threadText, steer }) {
 }
 
 // ── Aubé — la PM, el mensaje vivo de la tarea (migrado de forge.js) ──────────
+// Aubé NO solo redacta la tarea: cuando el plan tiene piezas que no se pisan,
+// decide PARTIRLA en subtareas paralelas y fija el ALCANCE (carril) de cada una.
+// El bloque ```subtareas lo parsea forge.js (parseSubtareasBloque) y lo pasa por
+// el cerebro puro (forge-trocear.js): si los carriles colisionan, descarta la
+// partición y la tarea queda en una sola subtarea `main`. Por eso a Aubé le basta
+// PROPONER con honestidad — la red de seguridad de la colisión está en el código.
 export function aubePrompt({ threadText, steer }) {
   return [
     'Eres Aubé. Tu único oficio: convertir una conversación en una TAREA clara.',
@@ -179,12 +185,46 @@ export function aubePrompt({ threadText, steer }) {
     ...direccionArr(steer),
     'Tu mensaje es ÚNICO y VIVO: cada vez lo reescribes entero con la mejor versión',
     'de la tarea según lo último que diga Tie. No acumules, REEMPLAZA.',
-    'Formato: primera línea = título; resto = cuerpo.',
+    'Formato: primera línea = título; resto = cuerpo (el PLAN completo vive aquí).',
+    '',
+    '━━━ ¿PARTIR EN SUBTAREAS PARALELAS? ━━━',
+    'Por DEFECTO la tarea NO se parte: una sola subtarea de alcance completo (main).',
+    'Solo propón partir cuando los trozos sean DE VERDAD independientes: tocan',
+    'ficheros/carpetas DISTINTOS, no comparten estado y no hay dependencia de orden',
+    '(back vs front es el caso típico). Si comparten superficie o uno necesita lo del',
+    'otro → NO partas, deja main. Ante la duda, NO partas.',
+    '',
+    'Si —y solo si— partes, añade al FINAL de tu mensaje un bloque exactamente así:',
+    '```subtareas',
+    '[',
+    '  {"name":"back","alcance":{"archivos":["controllers/**","routes/api/**"],"frontera":"lógica de servidor y endpoints","noTocar":["public/**"]}},',
+    '  {"name":"front","alcance":{"archivos":["public/**"],"frontera":"la UI y su pintado","noTocar":["controllers/**","routes/**"]}}',
+    ']',
+    '```',
+    'Cada subtarea lleva su CARRIL: `archivos` (zonas/globs que le tocan), `frontera`',
+    '(hasta dónde llega, en una frase) y `noTocar` (lo que NO debe tocar). El plan y',
+    'el detalle del CÓMO siguen en el cuerpo; el alcance solo recorta el carril para',
+    'que el programador no se salga. Los carriles NO deben solaparse entre sí.',
+    'Si no partes, NO pongas el bloque.',
     '',
     AL_GRANO,
     '',
     CIERRE_CONTESTAR,
   ].join('\n');
+}
+
+// Parsea el bloque ```subtareas … ``` que Aubé puede dejar al final de su mensaje.
+// Devuelve { subtareas: [...] } listo para forge-trocear.troceaTarea, o null si no
+// hay bloque o el JSON no cuela (sin bloque o ilegible → la tarea queda en `main`,
+// el default seguro). Función PURA (Contrato B): no lee disco ni env.
+export function parseSubtareasBloque(text) {
+  const t = String(text == null ? '' : text);
+  const m = t.match(/```subtareas\s*([\s\S]*?)```/i);
+  if (!m) return null;
+  let arr;
+  try { arr = JSON.parse(m[1].trim()); } catch { return null; }
+  if (!Array.isArray(arr) || !arr.length) return null;
+  return { subtareas: arr };
 }
 
 // OBJETIVO del ciclo (forge | producto): los personajes que tocan código necesitan

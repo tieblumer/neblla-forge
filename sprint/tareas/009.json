@@ -12,5 +12,8 @@
   "base": "dba41d6179aef59aa40d7c2ff1a5a58005966261",
   "builtAt": "2026-06-04T22:24:30.558Z",
   "brought": true,
-  "broughtAt": "2026-06-04T22:28:35.203Z"
+  "broughtAt": "2026-06-04T22:28:35.203Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-04T22:28:35.486Z",
+  "masterCommit": "8831db800dc37cdc1b16ce07b6f12fa94dbf7a54"
 }
