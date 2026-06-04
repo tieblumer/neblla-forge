@@ -1100,7 +1100,7 @@ function wipeChats() {
   }
 }
 
-app.post('/api/cycle/new', (_req, res) => {
+app.post('/api/cycle/new', (req, res) => {
   const pending = projectPending();
   if (pending === null) {
     return res.status(409).json({ error: 'No pude consultar el git del producto en ' + PROJECT_ROOT });
@@ -1111,6 +1111,14 @@ app.post('/api/cycle/new', (_req, res) => {
       pending,
     });
   }
+
+  // Empezar un ciclo nuevo REBOBINA el carril a Spike (cursor 0, sin pausa). Es el
+  // único momento en que el objetivo (forge/producto) puede fijarse libremente: el
+  // body opcional `target` viaja aquí para que el cambio sea atómico con el reinicio.
+  // (Mid-ciclo el endpoint /api/cycle/target está bloqueado a Spike — ver allí.)
+  const reset = cycle.normalize({ ...loadCycle(), cursor: 0, paused: false });
+  const target = req.body && req.body.target;
+  writeCycle(ROOT, target ? cycle.setTarget(reset, target) : reset);
 
   wipeChats();
   const chat = createChat(ROOT, { type: 'backlog', title: 'backlog' });
@@ -1197,8 +1205,20 @@ app.post('/api/cycle/resume', (_req, res) => {
 // NUNCA los dos a la vez. Lo sabrán todos los personajes (Miguel/Stevens/Miyagi).
 // Se fija antes de arrancar el sprint. Por defecto 'forge'.
 app.post('/api/cycle/target', (req, res) => {
+  // BLOQUEO: el objetivo solo se cambia "en caliente" cuando estamos en un ciclo
+  // nuevo (fase Spike, cursor 0). En cualquier otra fase el selector está cerrado
+  // para no cambiar de forge/producto a mitad de un ciclo en curso. Para cambiarlo
+  // hay que empezar un Nuevo ciclo (POST /api/cycle/new, que sí acepta `target`).
+  const cur = loadCycle();
+  if (cycle.phaseKey(cur) !== 'spike') {
+    return res.status(409).json({
+      error: 'El objetivo (forge/producto) solo se puede cambiar en un Nuevo ciclo (fase Spike). '
+        + 'Empieza un ciclo nuevo para cambiarlo.',
+      phase: cycle.phaseKey(cur),
+    });
+  }
   const target = req.body && req.body.target;
-  res.json(cycle.publicState(writeCycle(ROOT, cycle.setTarget(loadCycle(), target))));
+  res.json(cycle.publicState(writeCycle(ROOT, cycle.setTarget(cur, target))));
 });
 
 // DEPRECADO: el viejo "modo sprint" (lo sustituye el transporte del ciclo). Se

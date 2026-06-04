@@ -74,6 +74,9 @@
   .target-chip.is-project .tc-name { color: #2ec16a; }
   .target-chip.is-forge   .tc-name { color: var(--secondary); }
   .target-chip:hover { filter: brightness(1.12); }
+  /* BLOQUEADO: fuera de "Nuevo ciclo" (fase Spike) el objetivo no se puede cambiar. */
+  .target-chip:disabled { cursor: not-allowed; opacity: .55; filter: none; }
+  .target-chip:disabled:hover { filter: none; }
   .target-branch { font-size: 11px; color: var(--muted); padding-left: 4px; }
 
   /* CENTRO — el carril del viaje */
@@ -609,6 +612,12 @@
   // Alterna el objetivo del ciclo (forge ↔ producto). Uno por ciclo, nunca los dos.
   async function toggleTarget() {
     if (!cycle) return;
+    // Guardia: el objetivo solo cambia en un Nuevo ciclo (fase Spike). Fuera de ahí
+    // el chip ya está deshabilitado, pero blindamos también la función por si acaso.
+    if (cycle.cursor !== 0) {
+      alert('El objetivo (forge/producto) solo se puede cambiar en un Nuevo ciclo.\nEmpieza un ciclo nuevo para cambiarlo.');
+      return;
+    }
     const next = cycle.target === 'project' ? 'forge' : 'project';
     if (!confirm('¿Cambiar el objetivo del ciclo a "' + (next === 'project' ? 'producto' : 'forge')
       + '"?\nTodos los personajes (Miguel, Stevens, Miyagi) pasarán a hablar de eso.')) return;
@@ -654,6 +663,16 @@
     cycleBarEl.classList.toggle('offline', !cycle);
 
     const avail = !!cycle;
+    // BLOQUEO del objetivo: solo se puede cambiar en un Nuevo ciclo (fase Spike,
+    // cursor 0). En cualquier otra fase el chip queda deshabilitado para no cambiar
+    // de forge/producto a mitad de un ciclo en curso. El selector del Nuevo ciclo
+    // (puerta "Nuevo ciclo") sigue libre: ése ES el sitio donde se fija el objetivo.
+    const isNewCycle = avail && curIdx === 0;
+    targetChip.disabled = !isNewCycle;
+    targetChip.title = isNewCycle
+      ? 'Objetivo del ciclo (clic para cambiar). Uno por ciclo, nunca los dos.'
+      : 'El objetivo solo se cambia en un Nuevo ciclo. Empieza uno para cambiar de forge/producto.';
+
     const paused = !!(cycle && cycle.paused);
     btnAdvance.disabled = !avail || curIdx < 0 || curIdx >= phases.length - 1;
     btnBack.disabled = !avail || curIdx <= 0;
@@ -1558,17 +1577,14 @@
   // la puerta de entrada. Confirma, fija objetivo + rama, y barre el taller.
   document.getElementById('newStart').onclick = async () => {
     if (!confirm('Empezar un ciclo nuevo borra TODAS las conversaciones del taller y abre el backlog.\nSolo funciona si el producto (project/) está limpio.\n\n¿Seguir?')) return;
-    // fija el objetivo elegido en la puerta antes de arrancar (si cambió).
-    if (cycle && newTargetChoice && newTargetChoice !== cycle.target) {
-      try {
-        cycle = await (await fetch('/api/cycle/target', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target: newTargetChoice }),
-        })).json();
-      } catch {}
-    }
     setBranch(newBranch.value.trim());
-    const res = await fetch('/api/cycle/new', { method: 'POST' });
+    // El objetivo elegido en la puerta viaja DENTRO de /api/cycle/new: ahí el cambio
+    // es atómico con el reinicio a Spike (el endpoint suelto /api/cycle/target está
+    // bloqueado fuera de Spike). Así "Nuevo ciclo" es el único sitio que lo fija.
+    const res = await fetch('/api/cycle/new', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: newTargetChoice }),
+    });
     if (res.status === 409) {
       const j = await res.json();
       let msg = j.error || 'No se pudo.';
