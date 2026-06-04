@@ -363,11 +363,12 @@ ya escrito*: la exploración valió, el desorden no contamina.
 > nueva limpia (p.ej. `sprint`), revirtiendo el resto. Posible refinamiento: que las ramas lleven el
 > **nombre del estado actual del ciclo**. Pendiente de aterrizar en una conversación propia.
 
-> **Deuda conocida (2026-06-05):** las tareas **003 y 004** quedan en estado `cogida` ⏳ ("en
-> curso") aunque su código YA está en master — se fusionaron **a mano** durante el incidente de los
-> worktrees, antes de que existiera el auto-merge, así que nunca se les marcó `enMaster` y sus
-> worktrees fueron podados. Es dato rancio de la transición, no un fallo del motor nuevo. Pendiente:
-> marcarlas `enMaster` ✓ (o limpiar su referencia de worktree muerta) para que el panel no mienta.
+> **Deuda de la transición (2026-06-05, RESUELTA):** las tareas **001–004** quedaron en estados
+> dispares (▢/🌳/⏳) aunque su código YA estaba en master — se fusionaron **a mano** durante el
+> incidente de los worktrees, antes de que existiera el auto-merge, así que nunca se les marcó
+> `enMaster` y sus worktrees fueron podados. Era dato rancio, no un fallo del motor nuevo. Se
+> corrigió marcándolas las cuatro `enMaster` ✓ (commit de estado `1258cf9`). Las tareas que se
+> ejecuten de ahora en adelante cierran solas por el auto-merge.
 
 ### F21 — Miga de pan del ciclo + mando de transporte (4 acciones)
 En alguna parte visible se ve **todo el ciclo en una miga de pan** separada por ">", con la fase
