@@ -4,5 +4,13 @@
   "title": "Alinear forge-backbone.md con los nuevos nombres y la distinción dentro/fuera/hechos",
   "body": "La UI ya renombró los botones (Enviar · Opinión de Iris · Opinión de William · Auditar código…), pero el doc canónico forge-backbone.md sigue en la vieja prosa (Charlar / Challenge / Investigar). Diseño y pantalla cuentan historias distintas; hay que cerrar esa brecha.\n\nQUÉ TOCAR (3 sitios, ya localizados):\n1. §Centro (~líneas 103-106): \"Charlar → Iris\", \"Challenge → William\", \"Investigar/auditar\" → renombrar a Opinión de Iris / Opinión de William / Auditar código.\n2. Tabla F22 (~líneas 440-450): filas Charlar, Investigar, Challenge → nombres nuevos.\n3. §Perfiles (~línea 462 en adelante): reescribir las tres descripciones con el matiz afinado.\n\nEL MATIZ QUE DEBE QUEDAR ESCRITO:\n- Auditar código (Stevens) = los hechos. Baja al código REAL: qué hay implementado de verdad, en qué estado, el nombre exacto de una variable. Cero interpretación, solo el mapa de lo que hay.\n- Opinión de Iris = mirada hacia DENTRO. Cómo encaja la idea en el panorama actual y qué afecta a la empresa: qué rompe, qué acelera, qué descoloca.\n- Opinión de William = mirada hacia FUERA. Qué técnicas, herramientas o ideas del mercado aplicarían bien aquí.\n\nALCANCE: solo renombrar etiquetas + reescribir esas tres descripciones. NO es find-and-replace bruto, NO se tocan IDs internos ni código (la UI ya está bien). Es backbone = canon: pasada pensada, no automática.",
   "fromChat": "022",
-  "createdAt": "2026-06-04T21:11:16.390Z"
+  "createdAt": "2026-06-04T21:11:16.390Z",
+  "threadId": "031",
+  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t007-1780611756465",
+  "branch": "miguel/tarea-007-1780611756465",
+  "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
+  "base": "f59d264a1cbcaff275b6023d6dbc343db58a9114",
+  "builtAt": "2026-06-04T22:22:36.942Z",
+  "brought": true,
+  "broughtAt": "2026-06-04T22:24:50.538Z"
 }

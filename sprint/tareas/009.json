@@ -4,5 +4,11 @@
   "title": "Mover \"cierre\" y \"finalizar ciclo\" a las flechas de navegación",
   "body": "Ahora mismo \"cierre\" / \"finalizar ciclo\" están fuera del flujo. Tie quiere que sean un estado más del recorrido (como plan → diana → build → release), de modo que se naveguen con las flechitas izquierda/derecha igual que el resto de pasos, no como un botón o sección aparte.",
   "fromChat": "018",
-  "createdAt": "2026-06-04T21:13:54.296Z"
+  "createdAt": "2026-06-04T21:13:54.296Z",
+  "threadId": "030",
+  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t009-1780611870112",
+  "branch": "miguel/tarea-009-1780611870112",
+  "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
+  "base": "dba41d6179aef59aa40d7c2ff1a5a58005966261",
+  "builtAt": "2026-06-04T22:24:30.558Z"
 }

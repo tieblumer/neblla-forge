@@ -5,5 +5,10 @@
   "body": "Hoy, si Tie tiene un bloque seleccionado pero no escribe nada y envía, Iris no responde. Debería: con input vacío + bloque seleccionado, Iris arranca conversación sobre ese bloque por iniciativa propia (qué es, qué hace, dudas), sin necesidad de que Tie teclee una pregunta.",
   "fromChat": "012",
   "createdAt": "2026-06-04T21:04:58.633Z",
-  "threadId": "027"
+  "threadId": "027",
+  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t005-1780611776209",
+  "branch": "miguel/tarea-005-1780611776209",
+  "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
+  "base": "ee11f9acb3cb8810b54c176418cd737c9dc5741c",
+  "builtAt": "2026-06-04T22:22:56.633Z"
 }
