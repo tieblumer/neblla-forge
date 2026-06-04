@@ -1,0 +1,16 @@
+{
+  "id": "011",
+  "num": 11,
+  "title": "Corregir el chip 🎯 de objetivo: cerrarlo SIEMPRE, no solo fuera de Spike",
+  "body": "Miguel entendió \"Nuevo ciclo\" como la fase Spike, y por eso dejó el chip de objetivo (🎯 forge/producto, arriba-izq) clicable durante toda la fase Spike. Es el malentendido: \"Nuevo ciclo\" no es una fase del ciclo, es la puerta de entrada (el ⚙ con su propio selector dentro). Spike ya es estar dentro de un ciclo en curso.\n\nQué hay que cambiar:\n- El chip 🎯 queda bloqueado (disabled) SIEMPRE, en todas las fases — incluido Spike. Quitar la excepción de cursor 0 en renderCycle() y en toggleTarget().\n- El ÚNICO sitio para cambiar forge/proyecto es el selector dentro de \"Nuevo ciclo\" (la puerta), que ya manda el target dentro de POST /api/cycle/new.\n\nQué se conserva (ya está bien): el backend blindado (409 si la fase no es spike en /api/cycle/target) y que el objetivo viaje atómico dentro de /api/cycle/new.\n\nFicheros: public/forge/index.html (CSS/lock del chip, guardia en toggleTarget). Comprobación: tras corregir, el chip está gris y no deja en NINGUNA fase; el objetivo solo se cambia abriendo \"Nuevo ciclo\".",
+  "fromChat": "028",
+  "createdAt": "2026-06-04T22:37:03.255Z",
+  "threadId": "032",
+  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t011-1780612629941",
+  "branch": "miguel/tarea-011-1780612629941",
+  "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
+  "base": "59d10d419b3fa0acf88987ec5613b661051eed5b",
+  "builtAt": "2026-06-04T22:37:10.363Z",
+  "brought": true,
+  "broughtAt": "2026-06-04T22:38:33.933Z"
+}

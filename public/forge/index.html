@@ -408,7 +408,7 @@
   <header class="cycle-bar" id="cycleBar">
     <!-- IZQUIERDA: el objetivo del ciclo, separado del viaje -->
     <div class="bar-left">
-      <button class="target-chip" id="targetChip" title="Objetivo del ciclo (clic para cambiar). Uno por ciclo, nunca los dos.">
+      <button class="target-chip" id="targetChip" disabled title="El objetivo (forge/producto) se fija al abrir un Nuevo ciclo. No se cambia a mitad de ciclo.">
         <span class="tc-icon">🎯</span><span class="tc-name" id="targetName">forge</span>
       </button>
       <div class="target-branch" id="targetBranch"></div>
@@ -600,25 +600,13 @@
     renderCycle();
   }
 
-  // Alterna el objetivo del ciclo (forge ↔ producto). Uno por ciclo, nunca los dos.
-  async function toggleTarget() {
+  // El objetivo (forge/producto) NUNCA se cambia desde el chip: el chip está siempre
+  // deshabilitado y el único sitio para fijar forge/producto es el selector dentro de
+  // la puerta "Nuevo ciclo" (que lo manda atómico en POST /api/cycle/new). Esta función
+  // queda como guardia por si algo intentara dispararla pese al chip deshabilitado.
+  function toggleTarget() {
     if (!cycle) return;
-    // Guardia: el objetivo solo cambia en un Nuevo ciclo (fase Spike). Fuera de ahí
-    // el chip ya está deshabilitado, pero blindamos también la función por si acaso.
-    if (cycle.cursor !== 0) {
-      alert('El objetivo (forge/producto) solo se puede cambiar en un Nuevo ciclo.\nEmpieza un ciclo nuevo para cambiarlo.');
-      return;
-    }
-    const next = cycle.target === 'project' ? 'forge' : 'project';
-    if (!confirm('¿Cambiar el objetivo del ciclo a "' + (next === 'project' ? 'producto' : 'forge')
-      + '"?\nTodos los personajes (Miguel, Stevens, Miyagi) pasarán a hablar de eso.')) return;
-    try {
-      cycle = await (await fetch('/api/cycle/target', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: next }),
-      })).json();
-    } catch { return; }
-    renderCycle();
+    alert('El objetivo (forge/producto) se fija al abrir un Nuevo ciclo.\nNo se puede cambiar a mitad de un ciclo.');
   }
 
   function renderCycle() {
@@ -654,15 +642,13 @@
     cycleBarEl.classList.toggle('offline', !cycle);
 
     const avail = !!cycle;
-    // BLOQUEO del objetivo: solo se puede cambiar en un Nuevo ciclo (fase Spike,
-    // cursor 0). En cualquier otra fase el chip queda deshabilitado para no cambiar
-    // de forge/producto a mitad de un ciclo en curso. El selector del Nuevo ciclo
-    // (puerta "Nuevo ciclo") sigue libre: ése ES el sitio donde se fija el objetivo.
-    const isNewCycle = avail && curIdx === 0;
-    targetChip.disabled = !isNewCycle;
-    targetChip.title = isNewCycle
-      ? 'Objetivo del ciclo (clic para cambiar). Uno por ciclo, nunca los dos.'
-      : 'El objetivo solo se cambia en un Nuevo ciclo. Empieza uno para cambiar de forge/producto.';
+    // BLOQUEO del objetivo: el chip está SIEMPRE deshabilitado, en todas las fases
+    // (incluido Spike). "Nuevo ciclo" no es una fase del ciclo, es la puerta de
+    // entrada: el ÚNICO sitio donde se fija forge/producto es el selector dentro de
+    // esa puerta, que manda el objetivo atómico en POST /api/cycle/new. Una vez
+    // dentro de un ciclo (Spike incluido) el objetivo ya no se toca.
+    targetChip.disabled = true;
+    targetChip.title = 'El objetivo (forge/producto) se fija al abrir un Nuevo ciclo. No se cambia a mitad de ciclo.';
 
     const paused = !!(cycle && cycle.paused);
     btnAdvance.disabled = !avail || curIdx < 0 || curIdx >= phases.length - 1;
