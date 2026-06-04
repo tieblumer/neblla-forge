@@ -1,0 +1,15 @@
+{
+  "id": "002",
+  "num": 2,
+  "title": "Reordenar la barra superior como un sendero que se lee de izquierda a derecha",
+  "body": "QUÉ HACER\n1. Izquierda: el icono del target (forge / producto) separado, a la izquierda del todo.\n2. Centro (el carril del viaje): una fila de indicadores con \">\" entre cada uno, en este orden — Nuevo ciclo › [fases: Spike › Grooming › Sprint › QA] › Finalizar ciclo. \"Nuevo ciclo\" y \"Finalizar ciclo\" NO son botones: son indicadores-parada con configuración dentro (target, nombre de rama, etc.). Hay que distinguirlos visualmente de las fases del medio para que se lean como las dos puertas con ajustes, no como una fase más.\n3. Los únicos botones del centro son Avanzar y Retroceder. No son hard actions: primero confirman que existe la situación que permite cambiar de fase, y entonces mueven.\n4. Convertir Avanzar de hard action a soft action: hoy salir de Spike borra el taller con su confirm. La tarea son DOS gestos a la vez — quitarle el confirm a Avanzar Y trasladar el confirm fuerte (borrado del taller / producto limpio) a \"Nuevo ciclo\", para que el borrado no se quede sin guardián.\n5. Derecha: los mandos que no son el viaje — Pausar (a la derecha del todo) y el combo de modelos (abajo a la derecha, pero dentro del carril central).\n6. Input de escritura: que el área crezca hasta al menos 10 líneas al saltar de línea, y un doble modo de envío (salto de línea / enter automático). Es comodidad de manos, aparte de la barra.\n\nHOTFIX: queda invisible a propósito (curita que solo despierta cuando Otto avisa). No se toca.",
+  "fromChat": "008",
+  "createdAt": "2026-06-04T00:54:21.436Z",
+  "threadId": "009",
+  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t002-1780563688714",
+  "branch": "miguel/tarea-002-1780563688714",
+  "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
+  "builtAt": "2026-06-04T09:01:29.246Z",
+  "brought": true,
+  "broughtAt": "2026-06-04T09:10:13.375Z"
+}

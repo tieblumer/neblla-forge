@@ -4,44 +4,151 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Forge</title>
+<link rel="icon" type="image/svg+xml" href="/forge/favicon.svg" />
 <style>
   :root {
-    --bg: #0e1116;
-    --panel: #161b22;
-    --panel-2: #1c232d;
-    --border: #2a323d;
-    --text: #e6edf3;
-    --muted: #8b97a6;
-    --accent: #4f9cff;
-    --accent-ink: #06101f;
-    --tie: #2a4d7a;
-    --other: #20262e;
+    /* paleta de marca Neblla (tema oscuro de developers.neblla.com) */
+    --bg: #08080c;
+    --panel: #222228;
+    --panel-2: #14151e;
+    --border: #1a1b28;
+    --text: #e8eaf0;
+    --muted: #8089a0;
+    --accent: #ff0066;        /* magenta de marca */
+    --accent-ink: #ffffff;    /* texto sobre el magenta */
+    --secondary: #5b33f6;     /* púrpura de marca */
+    --tie: #2a2150;           /* burbuja de Tie: tinte púrpura */
+    --other: #14151e;         /* burbuja de los demás: neutra */
+    --gate: #c9912e;          /* color cálido de las dos PUERTAS con ajustes */
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
+  /* Layout: una BARRA DEL CICLO arriba (miga de pan + transporte) ocupando todo
+     el ancho, y debajo las tres columnas (ideas · chat · tareas). */
   body {
     font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: var(--bg); color: var(--text);
-    display: grid; grid-template-columns: 280px 1fr 300px; height: 100vh;
-    transition: grid-template-columns .18s ease;
+    display: grid; grid-template-columns: 280px 1fr 300px; grid-template-rows: auto 1fr;
+    height: 100vh; transition: grid-template-columns .18s ease;
   }
   body.left-collapsed                     { grid-template-columns: 44px 1fr 300px; }
   body.right-collapsed                    { grid-template-columns: 280px 1fr 44px; }
   body.left-collapsed.right-collapsed     { grid-template-columns: 44px 1fr 44px; }
-  .col { height: 100vh; display: flex; flex-direction: column; min-height: 0; }
-  .col-left { background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; }
+
+  .col { min-height: 0; height: 100%; display: flex; flex-direction: column; }
+  .col-left   { grid-column: 1; grid-row: 2; background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; }
+  .col-center { grid-column: 2; grid-row: 2; background: var(--bg); }
+  .col-right  { grid-column: 3; grid-row: 2; background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; }
   /* plegada: solo queda la cabecera con el botón; el resto se esconde */
   body.left-collapsed .col-left .col-head { padding: 14px 0; justify-content: center; }
   body.left-collapsed .col-left .col-head > span,
-  body.left-collapsed .col-left #newCycle,
   body.left-collapsed .col-left .new-btn,
   body.left-collapsed .col-left .chat-list { display: none; }
-  .col-center { background: var(--bg); }
-  .col-right { background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; }
   body.right-collapsed .col-right .col-head { padding: 14px 0; justify-content: center; }
   body.right-collapsed .col-right .col-head > span,
-  body.right-collapsed .col-right .col-head .soon,
-  body.right-collapsed .col-right .placeholder-pad { display: none; }
+  body.right-collapsed .col-right .tarea-list { display: none; }
+
+  /* ── BARRA DEL CICLO (F21): un SENDERO que se lee de izquierda a derecha ────
+     IZQUIERDA: el objetivo (forge/producto), separado del viaje.
+     CENTRO: el carril del viaje — Nuevo ciclo › [fases] › Finalizar ciclo, con
+             ◀ Retroceder / Avanzar ▶ como únicos botones; debajo, el modelo.
+     DERECHA: los mandos que no son el viaje (Pausar). */
+  .cycle-bar {
+    grid-column: 1 / -1; grid-row: 1;
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+    overflow: visible;
+  }
+  .bar-left, .bar-right { display: flex; align-items: center; flex: 0 0 auto; }
+  .bar-left { flex-direction: column; align-items: flex-start; gap: 1px; }
+  .bar-center { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+
+  /* IZQUIERDA — chip del objetivo + rama debajo */
+  .target-chip {
+    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--panel-2); border: 1px solid var(--secondary); color: var(--text);
+    border-radius: 999px; padding: 4px 12px;
+  }
+  .target-chip.is-project { border-color: #2ec16a; }
+  .target-chip.is-project .tc-name { color: #2ec16a; }
+  .target-chip.is-forge   .tc-name { color: var(--secondary); }
+  .target-chip:hover { filter: brightness(1.12); }
+  .target-branch { font-size: 11px; color: var(--muted); padding-left: 4px; }
+
+  /* CENTRO — el carril del viaje */
+  .rail { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; min-width: 0; }
+  .rail-sep { color: var(--border); font-size: 16px; user-select: none; }
+  .breadcrumb { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; min-width: 0; }
+  .bc-phase {
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    padding: 3px 10px; border-radius: 7px; border: 1px solid transparent; white-space: nowrap;
+  }
+  .bc-phase.active {
+    color: var(--accent-ink); background: var(--accent); border-color: var(--accent);
+    box-shadow: 0 0 14px rgba(255,0,102,.35);
+  }
+  .bc-sep { color: var(--border); font-size: 14px; padding: 0 2px; user-select: none; }
+
+  /* las dos PUERTAS-parada: NO son fases ni botones de acción; son paradas con
+     ajustes dentro. Borde punteado cálido + engranaje para que se lean distintas. */
+  .gate { position: relative; }
+  .gate-stop {
+    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+    background: rgba(201,145,46,.10); color: var(--gate);
+    border: 1px dashed var(--gate); border-radius: 999px; padding: 4px 12px;
+  }
+  .gate-stop:hover { background: rgba(201,145,46,.20); }
+  .gate-pop {
+    display: none; position: absolute; top: calc(100% + 8px); z-index: 40;
+    width: 260px; padding: 14px; background: var(--panel-2);
+    border: 1px solid var(--gate); border-radius: 10px; box-shadow: 0 10px 34px rgba(0,0,0,.5);
+  }
+  .gate-pop.open { display: block; }
+  #gateNew .gate-pop { left: 0; }
+  #gateFin .gate-pop { right: 0; }
+  .gate-pop h4 { margin: 0 0 4px; font-size: 13px; }
+  .gate-pop p { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .gate-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .gate-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .gate-seg button {
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    background: transparent; color: var(--muted); border: 0; border-right: 1px solid var(--border); padding: 4px 11px;
+  }
+  .gate-seg button:last-child { border-right: 0; }
+  .gate-seg button.active { background: var(--secondary); color: #fff; }
+  .gate-pop input.gate-branch {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 6px 9px; font: inherit; outline: none; margin-bottom: 10px;
+  }
+  .gate-pop input.gate-branch:focus { border-color: var(--secondary); }
+  .gate-danger {
+    width: 100%; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    background: #b3162a; color: #fff; border: 0; border-radius: 8px; padding: 8px 10px;
+  }
+  .gate-danger:hover { filter: brightness(1.1); }
+  .gate-scaffold { font-size: 11px; color: var(--muted); font-style: italic; }
+
+  /* pie del carril: el combo de modelos, abajo-derecha pero DENTRO del carril */
+  .rail-foot { display: flex; align-items: center; gap: 6px; align-self: flex-end; }
+  .rf-lbl { font-size: 11px; color: var(--muted); font-weight: 600; }
+
+  .cycle-bar.offline .rail,
+  .cycle-bar.offline .target-chip { opacity: .45; }
+  .cycle-paused {
+    font-size: 11px; font-weight: 700; color: var(--secondary);
+    border: 1px solid var(--secondary); border-radius: 999px; padding: 1px 9px; margin-left: 6px;
+  }
+
+  .tp-btn {
+    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 5px 12px; white-space: nowrap;
+  }
+  .tp-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .tp-btn:active:not(:disabled) { transform: translateY(1px); }
+  .tp-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .tp-btn.primary:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 
   .col-head {
     padding: 14px 16px; border-bottom: 1px solid var(--border);
@@ -55,6 +162,14 @@
     border-radius: 6px; padding: 3px 9px;
   }
   .cycle-btn:hover { color: var(--text); border-color: var(--accent); }
+  /* selector de modelo (global, junto a las acciones secundarias de la barra). */
+  .model-picker {
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px 6px;
+  }
+  .model-picker:hover { border-color: var(--accent); }
+  .model-picker:focus { outline: none; border-color: var(--accent); }
 
   .collapse-btn {
     font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
@@ -78,8 +193,18 @@
   }
   .chat-item:hover { background: var(--panel-2); }
   .chat-item.active { background: var(--panel-2); border-color: var(--border); }
+  .chat-item .row { display: flex; align-items: flex-start; gap: 8px; }
+  .chat-item .body { flex: 1 1 auto; min-width: 0; }
   .chat-item .title { font-weight: 500; }
   .chat-item .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  /* botón de borrar (tarea #001): oculto hasta que el ratón pasa por la fila */
+  .chat-del {
+    flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
+    background: transparent; color: var(--muted); border: 1px solid transparent;
+    border-radius: 6px; padding: 2px 7px; opacity: 0; transition: opacity .12s ease;
+  }
+  .chat-item:hover .chat-del, .chat-item.active .chat-del { opacity: 1; }
+  .chat-del:hover { color: #ff6b6b; border-color: #ff6b6b; }
   .empty { color: var(--muted); padding: 24px 16px; text-align: center; font-size: 13px; }
 
   /* CENTRO: hilo arriba (scroll), compositor abajo */
@@ -92,77 +217,254 @@
   .bubble {
     padding: 9px 13px; border-radius: 12px; background: var(--other);
     white-space: pre-wrap; word-wrap: break-word; display: inline-block; max-width: 100%;
+    cursor: pointer; border: 2px solid transparent;
   }
   .bubble.tie { background: var(--tie); }
+  .bubble:hover { border-color: var(--border); }
+  /* pantallazo pegado: thumbnail dentro del mensaje + lightbox al clicar */
+  .thumb {
+    display: block; max-width: 220px; max-height: 160px; margin: 4px 0;
+    border-radius: 8px; border: 1px solid var(--border); cursor: zoom-in;
+  }
+  .lightbox {
+    display: none; position: fixed; inset: 0; z-index: 1000; padding: 24px;
+    background: rgba(0,0,0,.82); align-items: center; justify-content: center; cursor: zoom-out;
+  }
+  .lightbox img { max-width: 95vw; max-height: 95vh; border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.6); }
+  /* F9b: definición FIJA de la tarea, anclada arriba del hilo */
+  .tarea-def {
+    flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--panel);
+    padding: 14px 24px; max-height: 40vh; overflow-y: auto;
+  }
+  .tarea-def .td-eyebrow { font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .tarea-def h2 { margin: 4px 0 6px; font-size: 16px; }
+  .tarea-def .td-body { white-space: pre-wrap; color: var(--text); font-size: 13px; }
+  .tarea-def .td-acts { display: flex; gap: 8px; margin-top: 10px; }
+  .tarea-def .td-btn {
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 4px 12px;
+  }
+  .tarea-def .td-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .tarea-def .td-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .tarea-def input.td-edit, .tarea-def textarea.td-edit {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font: inherit; outline: none; margin-bottom: 8px;
+  }
+  .tarea-def textarea.td-edit { min-height: 90px; resize: vertical; }
+  /* F22 — el mensaje SELECCIONADO es el REY: se ve muy marcado (lo más
+     importante de la pantalla). Define sobre qué actúan las herramientas. */
+  .node.selected > .bubble {
+    border-color: var(--accent);
+    background: rgba(255,0,102,.10);
+    box-shadow: 0 0 0 4px rgba(255,0,102,.18), 0 0 20px rgba(255,0,102,.28);
+  }
+  .node.selected > .who { color: var(--accent); font-weight: 700; }
+
   /* contenedor de hijos: por defecto SIN sangría (la respuesta única va justo
      debajo, misma columna). Si la madre tiene varias respuestas, .branch sangra
      +1 unidad a todo el grupo y los marca con la línea del hilo. */
   .children { }
   .children.branch { padding-left: 22px; margin-left: 4px; border-left: 2px solid var(--border); }
 
-  /* barra de acciones por mensaje (todas disponibles de principio) */
-  .actions { display: flex; gap: 6px; margin: 5px 2px 2px; flex-wrap: wrap; }
-  .act {
-    font: inherit; font-size: 11px; font-weight: 600; border-radius: 6px; padding: 2px 9px;
-    border: 1px solid var(--border); background: transparent; color: var(--muted);
-  }
-  .act.live { cursor: pointer; }
-  .act.live:hover { color: var(--text); border-color: var(--accent); }
-  .act.dead { cursor: not-allowed; opacity: .45; }       /* 🚫 al pasar por encima */
-
-  .reply-banner {
-    font-size: 12px; color: var(--muted); margin-bottom: 8px; display: none;
-  }
+  .reply-banner { font-size: 12px; color: var(--muted); margin-bottom: 8px; display: none; }
   .reply-banner b { color: var(--accent); }
   .reply-banner a { color: var(--accent); cursor: pointer; margin-left: 10px; text-decoration: underline; }
 
   /* compositor fijo abajo */
   .composer { flex: 0 0 auto; border-top: 1px solid var(--border); padding: 12px 16px 14px; background: var(--panel); }
+
+  /* F22 — barra de SELECCIÓN: qué mensaje es el rey + sus acciones propias +
+     el selector de SCOPE universal (mensaje / hilo / conversación). */
+  .selection { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .sel-info {
+    font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px;
+    min-width: 0; max-width: 100%;
+  }
+  .sel-info b { color: var(--text); }
+  .sel-info .king { color: var(--accent); }
+  .sel-info .preview {
+    color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;
+  }
+  .sel-acts { display: flex; gap: 6px; }
+  .sel-act {
+    font: inherit; font-size: 11px; font-weight: 600; border-radius: 6px; padding: 2px 9px;
+    border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .sel-act:hover { color: var(--text); border-color: var(--accent); }
+  .sel-act.special { color: var(--accent); border-color: var(--accent); }
+
+  .scope-pick { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+  .scope-lbl { font-size: 11px; color: var(--muted); font-weight: 600; }
+  .scope-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .scope-btn {
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    background: transparent; color: var(--muted); border: 0; border-right: 1px solid var(--border);
+    padding: 4px 11px;
+  }
+  .scope-btn:last-child { border-right: 0; }
+  .scope-btn:hover { color: var(--text); }
+  .scope-btn.active { background: var(--accent); color: var(--accent-ink); }
+
+  /* el área crece sola con el texto hasta 10 líneas (~232px) y luego hace scroll. */
   .composer textarea {
-    width: 100%; resize: none; min-height: 64px; max-height: 180px;
+    width: 100%; resize: none; min-height: 64px; max-height: 232px; overflow-y: auto;
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 10px 12px; font: inherit; outline: none;
   }
   .composer textarea:focus { border-color: var(--accent); }
   .composer textarea:disabled { opacity: .5; }
 
+  /* modo de envío: cómo se porta Enter (envía / salta línea). Persiste. */
+  .send-mode { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+  .send-mode .sm-lbl { font-size: 11px; color: var(--muted); font-weight: 600; }
+  .sm-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .sm-seg button {
+    font: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+    background: transparent; color: var(--muted); border: 0; border-right: 1px solid var(--border); padding: 4px 10px;
+  }
+  .sm-seg button:last-child { border-right: 0; }
+  .sm-seg button.active { background: var(--accent); color: var(--accent-ink); }
+
   .tools { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .tool {
     padding: 7px 14px; border-radius: 8px; font: inherit; font-weight: 600; font-size: 13px;
-    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer;
   }
-  .tool.live { cursor: pointer; border-color: var(--accent); color: var(--accent); }
-  .tool.live:hover { background: rgba(79,156,255,.12); }
-  .tool.live:active { transform: translateY(1px); }
-  .tool.dead { cursor: not-allowed; color: var(--muted); opacity: .65; }   /* 🚫 al pasar por encima */
-  .tool:disabled { cursor: not-allowed; }
+  .tool.primary { border-color: var(--accent); color: var(--accent); }
+  .tool.primary:hover { background: rgba(255,0,102,.12); }
+  .tool:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .tool:active:not(:disabled) { transform: translateY(1px); }
+  .tool:disabled { cursor: not-allowed; opacity: .5; }
 
-  .soon {
-    font-size: 11px; color: var(--muted);
-    border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; font-weight: 500;
-  }
   .placeholder-pad { color: var(--muted); padding: 24px 16px; font-size: 13px; }
 
-  /* bloque "pensando": fantasma con barrido (shimmer) mientras el headless piensa.
-     El brillo cruza siempre en el mismo sentido (izq → der). */
+  /* lista de tareas (columna derecha) — agrupada por estado, ordenada por el motor */
+  .tarea-list { list-style: none; margin: 0; padding: 4px 8px 16px; }
+  /* cabecera de cada cajón (Revisar / En curso / Por hacer / Terminadas) */
+  .tarea-grupo { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; padding: 12px 6px 4px; }
+  .tarea-grupo:first-child { padding-top: 4px; }
+  .tarea-item {
+    padding: 8px 10px; border-radius: 8px; margin-bottom: 4px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel-2);
+  }
+  .tarea-item:hover { border-color: var(--accent); }
+  .tarea-item.active { border-color: var(--accent); background: rgba(255,0,102,.10); }
+  /* fila principal: icono de estado + título cortísimo */
+  .tarea-row { display: flex; align-items: center; gap: 8px; }
+  .tarea-ico { flex: 0 0 auto; font-size: 14px; width: 18px; text-align: center; }
+  .tarea-ico.rojo { color: #ff5470; }
+  .tarea-item .title { font-weight: 500; flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* barrita clicable que despliega el contenedor de subtareas */
+  .tarea-bar { margin-top: 7px; height: 5px; border-radius: 3px; background: var(--border);
+    cursor: pointer; position: relative; overflow: hidden; }
+  .tarea-bar:hover { background: var(--secondary); }
+  .tarea-bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: .55; }
+  .tarea-subs { margin: 6px 0 1px; padding-left: 4px; border-left: 2px solid var(--border); }
+  .tarea-subs.hidden { display: none; }
+  .tarea-sub { display: flex; align-items: center; gap: 8px; padding: 2px 0;
+    font-size: 12px; color: var(--text); }
+  .tarea-sub .tarea-ico { font-size: 12px; width: 16px; }
+  .tarea-sub .sname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* bloque "pensando": fantasma con barrido (shimmer) mientras el headless piensa. */
   @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
   .node.thinking { margin: 0 0 12px; }
-  .bubble.skeleton-wrap { width: 240px; max-width: 70%; padding: 11px 13px; }
+  .bubble.skeleton-wrap { width: 240px; max-width: 70%; padding: 11px 13px; cursor: default; }
   .skeleton {
     height: 11px; border-radius: 6px; margin: 0 0 8px;
-    background: linear-gradient(90deg, #20262e 25%, #313c49 50%, #20262e 75%);
+    background: linear-gradient(90deg, #14151e 25%, #26223d 50%, #14151e 75%);
     background-size: 200% 100%; animation: shimmer 1.3s linear infinite;
   }
   .skeleton:last-child { margin-bottom: 0; }
+
+  /* cabecera central: título editable + varita de nombre automático */
+  .head-title-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .chat-title {
+    cursor: text; border-radius: 6px; padding: 2px 6px; margin: -2px -6px;
+    outline: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .chat-title:hover { background: var(--panel-2); }
+  .chat-title[contenteditable="true"] {
+    background: var(--bg); border: 1px solid var(--accent); white-space: normal; cursor: text;
+  }
+  .wand-btn {
+    font: inherit; font-size: 13px; line-height: 1; cursor: pointer; flex: 0 0 auto;
+    background: transparent; color: var(--secondary); border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px 8px;
+  }
+  .wand-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+  .wand-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .wand-btn.busy { opacity: .6; cursor: progress; }
 </style>
 </head>
 <body>
-  <!-- IZQUIERDA: conversaciones -->
+  <!-- BARRA DEL CICLO (F21): un SENDERO izquierda→derecha.
+       IZQUIERDA: el objetivo · CENTRO: el carril del viaje · DERECHA: Pausar. -->
+  <header class="cycle-bar" id="cycleBar">
+    <!-- IZQUIERDA: el objetivo del ciclo, separado del viaje -->
+    <div class="bar-left">
+      <button class="target-chip" id="targetChip" title="Objetivo del ciclo (clic para cambiar). Uno por ciclo, nunca los dos.">
+        <span class="tc-icon">🎯</span><span class="tc-name" id="targetName">forge</span>
+      </button>
+      <div class="target-branch" id="targetBranch"></div>
+    </div>
+
+    <!-- CENTRO: el carril del viaje (Nuevo ciclo › fases › Finalizar ciclo) -->
+    <div class="bar-center">
+      <div class="rail" id="rail">
+        <!-- puerta de ENTRADA: una parada con ajustes (NO un botón de acción) -->
+        <div class="gate" id="gateNew">
+          <button class="gate-stop" id="gateNewBtn" title="Abrir los ajustes del ciclo nuevo">⚙ Nuevo ciclo</button>
+          <div class="gate-pop" id="popNew">
+            <h4>Nuevo ciclo</h4>
+            <p>Arranca un ciclo limpio. Define sobre qué trabajar y con qué rama.</p>
+            <div class="gate-row">
+              <span class="rf-lbl">Objetivo</span>
+              <div class="gate-seg" id="newTargetSeg">
+                <button data-target="forge">forge</button>
+                <button data-target="project">producto</button>
+              </div>
+            </div>
+            <input class="gate-branch" id="newBranch" placeholder="nombre de rama (ej. ciclo/qa-barra)" />
+            <button class="gate-danger" id="newStart" title="Borra el taller (conversaciones) y exige el producto limpio">⚠ Empezar ciclo — borra el taller</button>
+          </div>
+        </div>
+        <span class="rail-sep">›</span>
+        <!-- únicos botones del carril: Retroceder / Avanzar (SOFT, no destruyen) -->
+        <button class="tp-btn" id="btnBack" title="Retroceder a la fase anterior (corregir el rumbo)">◀</button>
+        <div class="breadcrumb" id="breadcrumb"></div>
+        <button class="tp-btn" id="btnAdvance" title="Avanzar a la fase siguiente (comprueba que se puede y mueve)">▶</button>
+        <span class="rail-sep">›</span>
+        <!-- puerta de SALIDA: la otra parada con ajustes -->
+        <div class="gate" id="gateFin">
+          <button class="gate-stop" id="gateFinBtn" title="Abrir los ajustes de cierre del ciclo">⚙ Finalizar ciclo</button>
+          <div class="gate-pop" id="popFin">
+            <h4>Finalizar ciclo</h4>
+            <p>Cierra el ciclo y deja el carril listo para el siguiente.</p>
+            <div class="gate-scaffold">Andamio: el cierre real (recibo + sellado) se cablea más adelante.</div>
+          </div>
+        </div>
+      </div>
+      <!-- pie del carril: el combo de modelos, abajo-derecha pero dentro del carril -->
+      <div class="rail-foot">
+        <span class="rf-lbl">Modelo</span>
+        <select class="model-picker" id="modelPicker" title="Modelo de Claude para TODOS los personajes (Iris, Stevens, Miyagi, la pareja, William, Aubé, Anselmo, la varita)"></select>
+      </div>
+    </div>
+
+    <!-- DERECHA: los mandos que no son el viaje -->
+    <div class="bar-right">
+      <button class="tp-btn" id="btnPause" title="Pausar / reanudar el trabajo de la fase actual">⏸ Pausar</button>
+    </div>
+  </header>
+
+  <!-- IZQUIERDA: ideas (conversaciones) -->
   <aside class="col col-left">
     <div class="col-head">
       <button class="collapse-btn" id="toggleLeft" title="Plegar / desplegar la columna">«</button>
-      <span>Conversaciones</span>
-      <button class="cycle-btn" id="newCycle" title="Borra todas las conversaciones y abre el backlog. Requiere el producto limpio.">Nuevo ciclo</button>
+      <span>Ideas</span>
     </div>
     <button class="new-btn" id="newChat">+ Nueva conversación</button>
     <ul class="chat-list" id="chatList"></ul>
@@ -170,131 +472,434 @@
 
   <!-- CENTRO: hilo + compositor -->
   <main class="col col-center">
-    <div class="col-head" id="centerHead">Chat</div>
+    <div class="col-head" id="centerHead">
+      <span class="head-title-wrap">
+        <span id="chatTitle" class="chat-title" title="Clic para editar el nombre">Chat</span>
+        <button class="wand-btn" id="btnWand" title="Generar un nombre automático" disabled>✦</button>
+      </span>
+    </div>
+    <!-- F9b: bloque FIJO con la definición de la tarea (solo al abrir una tarea) -->
+    <div class="tarea-def" id="tareaDef" style="display:none"></div>
     <div class="thread" id="thread">
       <div class="placeholder">Crea o elige una conversación a la izquierda.</div>
     </div>
     <div class="composer">
+      <!-- F22: qué mensaje es el rey + sus acciones + el scope universal -->
+      <div class="selection" id="selection">
+        <span class="sel-info" id="selInfo"></span>
+        <span class="sel-acts" id="selActs"></span>
+        <div class="scope-pick">
+          <span class="scope-lbl">Alcance</span>
+          <div class="scope-seg" id="scopeSeg">
+            <button class="scope-btn" data-scope="mensaje" title="Actuar sobre el mensaje seleccionado">Mensaje</button>
+            <button class="scope-btn" data-scope="hilo" title="Actuar sobre toda la rama que nace en el mensaje">Hilo</button>
+            <button class="scope-btn" data-scope="conversacion" title="Actuar sobre la conversación entera">Conversación</button>
+          </div>
+        </div>
+      </div>
       <div class="reply-banner" id="replyBanner"></div>
       <textarea id="input" placeholder="Escribe aquí…" disabled></textarea>
       <div class="tools" id="tools">
-        <button class="tool live" id="btnCharlar" disabled>Charlar</button>
-        <button class="tool dead" disabled title="todavía no funciona">Preguntar</button>
-        <button class="tool dead" disabled title="todavía no funciona">Pedir</button>
-        <button class="tool dead" disabled title="todavía no funciona">Challenge</button>
+        <button class="tool" id="btnResponder" disabled title="Envía tu texto sin que conteste nadie (punto final)">☝️ Enviar</button>
+        <button class="tool" id="btnCharlar" disabled title="Iris mira HACIA DENTRO: cómo encaja la idea en el panorama actual y qué afecta a la empresa (qué rompe, qué acelera, qué descoloca)">💬 Opinión de Iris</button>
+        <button class="tool" id="btnChallenge" disabled title="William mira HACIA FUERA: qué técnicas, herramientas o ideas del mercado aplicarían bien aquí (según el alcance elegido)">⚔️ Opinión de William</button>
+        <button class="tool" id="btnInvestigar" disabled title="Stevens baja al código REAL: los hechos — qué está implementado de verdad, en qué estado, el nombre exacto de una variable. Cero interpretación, solo el mapa de lo que hay">🔍 Auditar código</button>
+        <button class="tool" id="btnConsejo" disabled title="Mr. Miyagi da una opinión honesta">🌿 Consejo</button>
+        <button class="tool" id="btnDiscutir" disabled title="Romina o Ariel salta con un lado (al azar); vuelve a pulsar y salta el otro con el lado contrario">🙎‍♂️🙎‍♀️ Discutir</button>
+        <button class="tool" id="btnResumir" disabled title="Anselmo resume el hilo (su nota se puede compactar)">📝 Resumir</button>
+        <button class="tool" id="btnTarea" disabled title="Aubé baja el hilo a una tarea">❎ Crear tarea</button>
+        <!-- doble modo de envío: qué hace Enter (envía / salta línea). Persiste. -->
+        <div class="send-mode">
+          <span class="sm-lbl">Enter:</span>
+          <div class="sm-seg" id="sendModeSeg">
+            <button data-mode="send" title="Enter envía · Shift+Enter salta línea">envía</button>
+            <button data-mode="newline" title="Enter salta línea · Ctrl/⌘+Enter envía">salta línea</button>
+          </div>
+        </div>
       </div>
     </div>
   </main>
 
-  <!-- DERECHA: tareas (andamio) -->
+  <!-- DERECHA: tareas (las crea Aubé al aprobar; independientes) -->
   <aside class="col col-right">
     <div class="col-head">
-      <span>Tareas <span class="soon">próximamente</span></span>
+      <span>Tareas</span>
       <button class="collapse-btn" id="toggleRight" title="Plegar / desplegar la columna">»</button>
     </div>
-    <div class="placeholder-pad">Aquí vivirán las tareas que nazcan de las conversaciones.</div>
+    <ul class="tarea-list" id="tareaList"></ul>
   </aside>
 
 <script>
   const listEl = document.getElementById('chatList');
+  const tareaListEl = document.getElementById('tareaList');
+  const tareaDefEl = document.getElementById('tareaDef');
+  let currentTarea = null;   // F9b: la tarea abierta en el centro (su definición fija), o null
   const threadEl = document.getElementById('thread');
-  const headEl = document.getElementById('centerHead');
+  const titleEl = document.getElementById('chatTitle');
+  const btnWand = document.getElementById('btnWand');
   const inputEl = document.getElementById('input');
-  const btnCharlar = document.getElementById('btnCharlar');
   const banner = document.getElementById('replyBanner');
+  const selInfo = document.getElementById('selInfo');
+  const selActs = document.getElementById('selActs');
+  const scopeSeg = document.getElementById('scopeSeg');
+  const btnResponder = document.getElementById('btnResponder');
+  const btnCharlar = document.getElementById('btnCharlar');
+  const btnInvestigar = document.getElementById('btnInvestigar');
+  const btnConsejo = document.getElementById('btnConsejo');
+  const btnDiscutir = document.getElementById('btnDiscutir');
+  const btnChallenge = document.getElementById('btnChallenge');
+  const btnTarea = document.getElementById('btnTarea');
+  const btnResumir = document.getElementById('btnResumir');
+  const composerBtns = [btnResponder, btnCharlar, btnInvestigar, btnConsejo, btnDiscutir, btnChallenge, btnTarea, btnResumir];
+
+  // ── barra del ciclo (F21) ────────────────────────────────────────────────────
+  const bcEl = document.getElementById('breadcrumb');
+  const cycleBarEl = document.getElementById('cycleBar');
+  const btnAdvance = document.getElementById('btnAdvance');
+  const btnBack = document.getElementById('btnBack');
+  const btnPause = document.getElementById('btnPause');
+  const targetChip = document.getElementById('targetChip');
+  const targetName = document.getElementById('targetName');
+  const targetBranch = document.getElementById('targetBranch');
+  // si la forja aún no expone /api/cycle, pintamos la miga de pan en gris y
+  // dejamos el transporte inerte (no inventamos estado): fases canónicas de §2.
+  const FALLBACK_PHASES = [
+    { key: 'spike', label: 'Spike' }, { key: 'grooming', label: 'Grooming' },
+    { key: 'sprint', label: 'Sprint' }, { key: 'qa', label: 'QA' },
+  ];
+  let cycle = null; // último estado del ciclo, o null si el endpoint no responde
+
+  let currentTitle = '';
   let active = null;
   let lastCount = -1;
   let lastPending = false;
+  let lastSig = '';
   let pollTimer = null;
   // "pending": acabamos de enviar y esperamos la respuesta de un headless.
-  // baseline = nº de mensajes NO-tie en ese momento; cuando crezca, ya llegó.
   let pending = false;
   let pendingBaseline = 0;
   let otherCount = 0;
-  let replyTarget = null; // id del mensaje al que responde el compositor (null = raíz)
+  let pendingParent = null;
+  let pendingAuthor = 'iris';
+  // F22: el mensaje SELECCIONADO (el rey) + el SCOPE universal. La selección
+  // manda sobre qué actúan las herramientas; charlar/responder cuelgan de él.
+  let selectedId = null;
+  let scope = 'mensaje';
+  let editTarget = null;  // id del mensaje en edición (null = no estamos editando)
+  let selectAfterReply = false; // Discutir: al llegar la réplica, el rey salta a ella
+  let lastChat = null;    // último chat renderizado
 
-  // acciones disponibles por mensaje. live=funciona hoy; dead=todavía no (🚫).
-  const ACTIONS = [
-    { key: 'responder', label: 'Responder', live: true },
-    { key: 'challenge', label: 'Challenge', live: true },
-    { key: 'preguntar', label: 'Preguntar', live: false },
-    { key: 'pedir', label: 'Pedir', live: false },
-  ];
+  const NAMES = {
+    tie: 'Tie', iris: 'Iris', william: 'William', anselmo: 'Anselmo', aube: 'Aubé',
+    stevens: 'Stevens', miyagi: 'Mr. Miyagi', romina: 'Romina', ariel: 'Ariel', miguel: 'Miguel', sistema: 'Sistema', revisor: 'Revisor',
+  };
+  function nameOf(a) { return NAMES[a] || (a ? a[0].toUpperCase() + a.slice(1) : '?'); }
 
-  function fmtDate(iso) { try { return new Date(iso).toLocaleString('es-ES'); } catch { return iso || ''; } }
+  // ── el ciclo: cargar, pintar y mover (transporte) ───────────────────────────
+  async function loadCycle() {
+    try {
+      const res = await fetch('/api/cycle');
+      if (!res.ok) throw new Error('no cycle');
+      cycle = await res.json();
+    } catch { cycle = null; }
+    renderCycle();
+  }
 
+  // Alterna el objetivo del ciclo (forge ↔ producto). Uno por ciclo, nunca los dos.
+  async function toggleTarget() {
+    if (!cycle) return;
+    const next = cycle.target === 'project' ? 'forge' : 'project';
+    if (!confirm('¿Cambiar el objetivo del ciclo a "' + (next === 'project' ? 'producto' : 'forge')
+      + '"?\nTodos los personajes (Miguel, Stevens, Miyagi) pasarán a hablar de eso.')) return;
+    try {
+      cycle = await (await fetch('/api/cycle/target', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: next }),
+      })).json();
+    } catch { return; }
+    renderCycle();
+  }
+
+  function renderCycle() {
+    const phases = (cycle && cycle.phases && cycle.phases.length) ? cycle.phases : FALLBACK_PHASES;
+    let curIdx = -1;
+    if (cycle) {
+      curIdx = (cycle.cursor != null) ? cycle.cursor : phases.findIndex((p) => p.key === cycle.phase);
+    }
+    // CENTRO: solo las fases del medio (las dos puertas son markup fijo del carril).
+    bcEl.innerHTML = '';
+    phases.forEach((p, i) => {
+      if (i) {
+        const sep = document.createElement('span');
+        sep.className = 'bc-sep'; sep.textContent = '›';
+        bcEl.appendChild(sep);
+      }
+      const span = document.createElement('span');
+      span.className = 'bc-phase' + (i === curIdx ? ' active' : '');
+      span.textContent = p.label;
+      bcEl.appendChild(span);
+    });
+    if (cycle && cycle.paused) {
+      const tag = document.createElement('span');
+      tag.className = 'cycle-paused'; tag.textContent = 'pausado';
+      bcEl.appendChild(tag);
+    }
+    // IZQUIERDA: el chip del objetivo + la rama debajo.
+    const target = (cycle && cycle.target) || 'forge';
+    targetName.textContent = target === 'project' ? 'producto' : 'forge';
+    targetChip.classList.toggle('is-project', target === 'project');
+    targetChip.classList.toggle('is-forge', target !== 'project');
+    targetBranch.textContent = '⌥ ' + getBranch();
+    cycleBarEl.classList.toggle('offline', !cycle);
+
+    const avail = !!cycle;
+    const paused = !!(cycle && cycle.paused);
+    btnAdvance.disabled = !avail || curIdx < 0 || curIdx >= phases.length - 1;
+    btnBack.disabled = !avail || curIdx <= 0;
+    btnPause.disabled = !avail;
+    btnPause.textContent = paused ? '▶ Reanudar' : '⏸ Pausar';
+    btnPause.title = paused ? 'Reanudar el trabajo de la fase actual' : 'Pausar el trabajo de la fase actual';
+  }
+
+  // El nombre de rama del ciclo es ajuste de la puerta "Nuevo ciclo"; aún no tiene
+  // backend, así que vive en localStorage (andamio honesto del Spike).
+  function getBranch() { return localStorage.getItem('forge.cycleBranch') || 'sin rama'; }
+  function setBranch(v) { localStorage.setItem('forge.cycleBranch', v || 'sin rama'); }
+
+  async function cycleDo(path) {
+    try {
+      const res = await fetch('/api/cycle/' + path, { method: 'POST' });
+      if (!res.ok) throw new Error('cycle move failed');
+      cycle = await res.json();
+      renderCycle();
+      return true;
+    } catch {
+      alert('No se pudo mover el ciclo.');
+      return false;
+    }
+  }
+
+  // ── Avanzar / Retroceder son SOFT: no son hard actions. Primero comprueban
+  // que existe la situación que permite cambiar de fase (canChangePhase) y
+  // entonces mueven. NO destruyen nada: el borrado del taller vive en su guardián
+  // fuerte dentro de "Nuevo ciclo". Hoy la precondición es un gancho que siempre
+  // dice que sí; falta cablear los chequeos reales (¿hay diana?, ¿build verde?).
+  function canChangePhase(/* dir */) {
+    if (!cycle) return { ok: false, reason: 'El ciclo aún no está disponible.' };
+    return { ok: true };
+  }
+  btnAdvance.onclick = async () => {
+    const gate = canChangePhase('advance');
+    if (!gate.ok) { alert(gate.reason); return; }
+    await cycleDo('advance');
+  };
+  btnBack.onclick = async () => {
+    const gate = canChangePhase('back');
+    if (!gate.ok) { alert(gate.reason); return; }
+    await cycleDo('back');
+  };
+  btnPause.onclick = () => cycleDo(cycle && cycle.paused ? 'resume' : 'pause');
+  targetChip.onclick = toggleTarget;
+
+  // ── listas ───────────────────────────────────────────────────────────────────
   async function loadList() {
     const chats = await (await fetch('/api/chats')).json();
     listEl.innerHTML = '';
     if (!chats.length) {
       listEl.innerHTML = '<li class="empty">Todavía no hay conversaciones.<br>Crea la primera.</li>';
-      return;
+      return chats;
     }
-    for (const c of chats) {
+    for (const c of chats.slice().reverse()) {
       const li = document.createElement('li');
       li.className = 'chat-item' + (c.id === active ? ' active' : '');
-      li.innerHTML = '<div class="title"></div><div class="meta"></div>';
+      li.innerHTML = '<div class="row"><div class="body"><div class="title"></div>'
+        + '<div class="meta"></div></div>'
+        + '<button class="chat-del" title="Borrar conversación (definitivo)">🗑</button></div>';
       li.querySelector('.title').textContent = c.title;
       li.querySelector('.meta').textContent = '#' + c.id + ' · ' + (c.type || '');
-      li.onclick = () => openChat(c.id);
+      li.querySelector('.body').onclick = () => openChat(c.id);
+      li.querySelector('.chat-del').onclick = (e) => { e.stopPropagation(); deleteChat(c); };
       listEl.appendChild(li);
+    }
+    return chats;
+  }
+
+  // Borra una conversación (definitivo). Si era la abierta, limpia el centro y
+  // corta el sondeo. (Tarea #001 de Miguel, adaptada al árbol vivo.)
+  async function deleteChat(c) {
+    if (!confirm('Borrar la conversación "' + c.title + '" (#' + c.id + ')?\n\nEs definitivo: no se puede deshacer.')) return;
+    const res = await fetch('/api/chats/' + c.id, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) { alert('No se pudo borrar la conversación.'); return; }
+    if (active === c.id) {
+      active = null; currentTarea = null;
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      lastCount = -1; pending = false;
+      cancelEdit();
+      inputEl.disabled = true; inputEl.value = '';
+      for (const b of composerBtns) b.disabled = true;
+      btnWand.disabled = true;
+      currentTitle = 'Chat'; titleEl.textContent = 'Chat';
+      renderTareaDef();
+      threadEl.innerHTML = '<div class="placeholder">Crea o elige una conversación a la izquierda.</div>';
+      updateSelectionUI();
+    }
+    loadList();
+  }
+
+  // qué tareas dejó el usuario desplegadas a mano (sobrevive a los refrescos del sondeo).
+  const tareaAbierta = {};
+
+  async function loadTareas() {
+    let data;
+    try { data = await (await fetch('/api/tareas')).json(); } catch { return; }
+    // el motor ya devuelve {tareas: [decoradas+ordenadas], grupos: [...]}.
+    const ts = (data && data.tareas) || [];
+    const grupos = (data && data.grupos) || [];
+    tareaListEl.innerHTML = '';
+    if (!ts.length) {
+      tareaListEl.innerHTML = '<li class="empty">Aún no hay tareas.<br>Nacen al aprobar a Aubé.</li>';
+      return;
+    }
+    // pinta cajón a cajón en el orden del motor; salta los cajones vacíos.
+    for (const g of grupos) {
+      const enCajon = ts.filter((t) => t.grupo === g.key);
+      if (!enCajon.length) continue;
+      const head = document.createElement('li');
+      head.className = 'tarea-grupo'; head.textContent = g.label;
+      tareaListEl.appendChild(head);
+      for (const t of enCajon) tareaListEl.appendChild(renderTareaItem(t));
     }
   }
 
-  // construye el nodo (burbuja + acciones + contenedor de hijos) recursivamente.
-  // isProng = este nodo es UNA de varias respuestas (un diente de una bifurcación
-  // de arriba). Si lo es, su continuación se sangra para no caer en la misma línea
-  // vertical que sus hermanas.
+  function renderTareaItem(t) {
+    const subs = t.subtareas || [];
+    const li = document.createElement('li');
+    li.className = 'tarea-item';
+    li.classList.toggle('active', !!(currentTarea && currentTarea.id === t.id));
+
+    // fila: icono de estado + título cortísimo (descripción en rollover).
+    const row = document.createElement('div'); row.className = 'tarea-row';
+    const ico = document.createElement('span'); ico.className = 'tarea-ico' + (t.estado === 'error' ? ' rojo' : '');
+    ico.textContent = t.icon;
+    const title = document.createElement('div'); title.className = 'title'; title.textContent = t.title;
+    row.append(ico, title);
+    row.onclick = () => openTarea(t.id);   // F9b: abre la tarea en el centro
+    li.appendChild(row);
+    li.title = t.body || '';
+
+    // contenedor de subtareas + barrita clicable. Despliegue AUTOMÁTICO si los
+    // iconos divergen (t.diverge); si no, manual (lo recuerda tareaAbierta).
+    const abierto = t.diverge || !!tareaAbierta[t.id];
+    const bar = document.createElement('div'); bar.className = 'tarea-bar';
+    const fill = document.createElement('div'); fill.className = 'fill';
+    // la barrita rellena según el avance de la subtarea menos avanzada (0..1).
+    const RANK = { error: 0, pendiente: 0, cogida: 0.5, mergeada: 1, cerrada: 1 };
+    fill.style.width = Math.round((RANK[t.estado] ?? 0) * 100) + '%';
+    bar.appendChild(fill);
+    bar.title = abierto ? 'Plegar subtareas' : 'Desplegar subtareas';
+    bar.onclick = (e) => {
+      e.stopPropagation();
+      tareaAbierta[t.id] = !abierto;
+      subsEl.classList.toggle('hidden');
+    };
+    li.appendChild(bar);
+
+    const subsEl = document.createElement('div');
+    subsEl.className = 'tarea-subs' + (abierto ? '' : ' hidden');
+    for (const s of subs) {
+      const se = document.createElement('div'); se.className = 'tarea-sub';
+      const si = document.createElement('span'); si.className = 'tarea-ico' + (s.estado === 'error' ? ' rojo' : '');
+      si.textContent = s.icon;
+      const sn = document.createElement('span'); sn.className = 'sname'; sn.textContent = s.name;
+      se.append(si, sn);
+      subsEl.appendChild(se);
+    }
+    li.appendChild(subsEl);
+    return li;
+  }
+
+  // ── pantallazos en el mensaje: thumbnail + lightbox ──────────────────────────
+  // Rellena la burbuja troceando el texto: los trozos normales van como nodos de
+  // texto (a prueba de inyección, sin innerHTML) y cada ruta de pantallazo se pinta
+  // como un <img> miniatura que al clicar abre el lightbox con la imagen completa.
+  const IMG_RE = /pantallazos\/pantallazo-\d+\.(?:png|jpe?g|gif|webp)/g;
+  function fillBubble(el, text) {
+    el.textContent = '';
+    const t = String(text == null ? '' : text);
+    let last = 0; let m; IMG_RE.lastIndex = 0;
+    while ((m = IMG_RE.exec(t)) !== null) {
+      if (m.index > last) el.appendChild(document.createTextNode(t.slice(last, m.index)));
+      const src = m[0];
+      const img = document.createElement('img');
+      img.className = 'thumb'; img.src = src; img.alt = src; img.loading = 'lazy';
+      img.title = 'Clic para ver completo';
+      img.onclick = (ev) => { ev.stopPropagation(); openLightbox(src); };
+      el.appendChild(img);
+      last = m.index + m[0].length;
+    }
+    if (last < t.length) el.appendChild(document.createTextNode(t.slice(last)));
+  }
+  function openLightbox(src) {
+    let lb = document.getElementById('lightbox');
+    if (!lb) {
+      lb = document.createElement('div');
+      lb.id = 'lightbox'; lb.className = 'lightbox';
+      lb.appendChild(document.createElement('img'));
+      lb.onclick = () => { lb.style.display = 'none'; };
+      document.body.appendChild(lb);
+    }
+    lb.querySelector('img').src = src;
+    lb.style.display = 'flex';
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const lb = document.getElementById('lightbox');
+    if (lb && lb.style.display !== 'none') lb.style.display = 'none';
+  });
+
+  // ── árbol de mensajes ─────────────────────────────────────────────────────────
+  // F22: ya NO hay barra de acciones por mensaje. El nodo se SELECCIONA al hacer
+  // clic en su burbuja (se vuelve el rey); las herramientas viven en la barra común.
   function renderNode(m, byParent, isProng) {
     const node = document.createElement('div');
-    node.className = 'node';
+    node.className = 'node' + (m.thinking ? ' thinking' : '') + (m.id === selectedId ? ' selected' : '');
 
     const who = document.createElement('div');
     who.className = 'who';
-    who.textContent = m.author + ' · ' + m.type + (m.replyTo ? ' · ↳ #' + m.replyTo : '') + '  (#' + m.id + ')';
+    who.textContent = m.thinking
+      ? nameOf(m.author) + ' · pensando…'
+      : nameOf(m.author) + ' · ' + m.type + (m.replyTo ? ' · ↳ #' + m.replyTo : '') + (m.edited ? ' · editado' : '') + '  (#' + m.id + ')'
+        + (m.id === selectedId ? '  · 👑 rey' : '');
+    node.appendChild(who);
+
+    if (m.thinking) {
+      node.appendChild(makeSkeletonBubble());
+      return node;
+    }
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble ' + (m.author === 'tie' ? 'tie' : 'other');
-    bubble.textContent = m.text;
-
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-    for (const a of ACTIONS) {
-      const b = document.createElement('button');
-      b.className = 'act ' + (a.live ? 'live' : 'dead');
-      b.textContent = a.label;
-      if (a.live) b.onclick = () => doAction(a.key, m);
-      else { b.disabled = true; b.title = 'todavía no funciona'; }
-      actions.appendChild(b);
-    }
-
-    node.appendChild(who);
+    fillBubble(bubble, m.text);
+    bubble.title = 'Clic para seleccionar este mensaje (el rey)';
+    bubble.onclick = () => selectMsg(m.id);
     node.appendChild(bubble);
-    node.appendChild(actions);
 
     const kids = byParent.get(m.id) || [];
     if (kids.length) {
       const c = document.createElement('div');
-      // sangra +1 unidad si hay bifurcación aquí (>1 hijo) O si este nodo es ya un
-      // diente de una bifurcación de arriba (isProng): así la continuación de una
-      // rama no comparte línea vertical con sus hermanas. Cadena lineal sin ramas
-      // por encima → hijo único cuelga en la misma columna, como antes.
-      const branch = kids.length > 1 || isProng;
-      c.className = 'children' + (branch ? ' branch' : '');
-      const kidsAreProngs = kids.length > 1;
-      for (const k of kids) c.appendChild(renderNode(k, byParent, kidsAreProngs));
+      const isFork = kids.length > 1;
+      // reddit: TODAS las respuestas expuestas a la vez (sin navegador ‹n/m›). Si
+      // hay bifurcación (o este nodo ya es un diente de una de arriba), el grupo
+      // se sangra y se marca con la línea del hilo; cada hermana es a su vez un
+      // diente, así su propia continuación también se sangra.
+      c.className = 'children' + (isFork || isProng ? ' branch' : '');
+      for (const k of kids) c.appendChild(renderNode(k, byParent, isFork));
       node.appendChild(c);
     }
     return node;
   }
 
-  // fantasma con barrido que se cuela al final del hilo mientras se espera respuesta.
-  function makeThinkingNode() {
-    const node = document.createElement('div');
-    node.className = 'node thinking';
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.textContent = 'pensando…';
+  function makeSkeletonBubble() {
     const bubble = document.createElement('div');
     bubble.className = 'bubble other skeleton-wrap';
     for (const w of [72, 92, 54]) {
@@ -303,22 +908,37 @@
       line.style.width = w + '%';
       bubble.appendChild(line);
     }
-    node.appendChild(who);
-    node.appendChild(bubble);
-    return node;
+    return bubble;
   }
 
+  const THINKING_ID = '__thinking__';
+
   function renderThread(chat) {
-    const msgs = chat.messages || [];
-    headEl.textContent = chat.title + '  ·  #' + chat.id;
+    lastChat = chat;
+    const real = (chat.messages || []).filter((m) => !m.collapsed);
+    // F22: SIEMPRE hay un rey. Si no había selección (o el rey desapareció tras
+    // compactar/borrar), cae al último mensaje real — el que naturalmente
+    // responderías/discutirías.
+    if (real.length && (selectedId == null || !real.some((m) => m.id === selectedId))) {
+      selectedId = real[real.length - 1].id;
+    }
+    if (titleEl.getAttribute('contenteditable') !== 'true') {
+      currentTitle = chat.title;
+      titleEl.textContent = chat.title;
+    }
+
+    const present = new Set(real.map((m) => m.id));
+    const msgs = real.slice();
+    if (pending) {
+      const parent = (pendingParent != null && present.has(pendingParent)) ? pendingParent : null;
+      msgs.push({ id: THINKING_ID, author: pendingAuthor, type: 'pensando', replyTo: parent, thinking: true, text: '' });
+    }
+
     if (!msgs.length) {
-      threadEl.innerHTML = pending
-        ? ''
-        : '<div class="placeholder">Hilo vacío. Escribe abajo y pulsa Charlar.</div>';
-      if (pending) threadEl.appendChild(makeThinkingNode());
+      threadEl.innerHTML = '<div class="placeholder">Hilo vacío. Escribe abajo y pulsa Enviar u Opinión de Iris.</div>';
+      updateSelectionUI();
       return;
     }
-    const present = new Set(msgs.map((m) => m.id));
     const byParent = new Map();
     for (const m of msgs) {
       const k = (m.replyTo != null && present.has(m.replyTo)) ? m.replyTo : 'root';
@@ -331,37 +951,280 @@
     const rootsAreProngs = roots.length > 1;
     for (const r of roots) frag.appendChild(renderNode(r, byParent, rootsAreProngs));
     threadEl.appendChild(frag);
-    if (pending) threadEl.appendChild(makeThinkingNode());
     threadEl.scrollTop = threadEl.scrollHeight;
+    updateSelectionUI();
   }
 
-  function doAction(key, m) {
-    if (key === 'responder') { setReplyTarget(m.id); }
-    else if (key === 'challenge') { challenge(m.id); }
+  // ── F22: selección (el rey) + scope universal ───────────────────────────────
+  function findMsg(id) {
+    if (id == null || !lastChat) return null;
+    return (lastChat.messages || []).find((m) => m.id === id) || null;
   }
 
-  function setReplyTarget(id) {
-    replyTarget = id;
+  function selectMsg(id) {
+    if (selectedId === id) return; // siempre hay un rey: no se deselecciona
+    selectedId = id;
+    if (lastChat) renderThread(lastChat); else updateSelectionUI();
+  }
+
+  // Pinta la barra de selección: qué es el rey, sus acciones propias (editar /
+  // compactar / aprobar según el autor) y resalta el scope activo.
+  function updateSelectionUI() {
+    const m = findMsg(selectedId);
+    selInfo.innerHTML = '';
+    selActs.innerHTML = '';
+    if (m) {
+      const lbl = document.createElement('span');
+      lbl.innerHTML = 'Sobre <span class="king">👑 #' + m.id + ' · ' + nameOf(m.author) + '</span>';
+      selInfo.appendChild(lbl);
+      const prev = document.createElement('span');
+      prev.className = 'preview';
+      prev.textContent = '“' + (m.text || '').replace(/\s+/g, ' ').slice(0, 60) + '”';
+      selInfo.appendChild(prev);
+
+      // acciones propias del mensaje rey
+      selActs.appendChild(selActBtn('Editar', () => startEdit(m)));
+      if (m.author === 'anselmo') selActs.appendChild(selActBtn('Compactar', () => compactar(m.id), true));
+      if (m.author === 'aube') selActs.appendChild(selActBtn('Aprobar', () => aprobarTarea(), true));
+      // el informe de Miguel es de QUIEN construyó → de ahí cuelga "Traer el código".
+      // Solo en mensajes de Miguel; habilitado si hay algo que traer, si no, gris.
+      if (m.author === 'miguel' && currentTarea) {
+        const b = selActBtn('⬇ Traer el código', () => traerTarea(currentTarea.id), true);
+        b.disabled = true; b.title = 'Comprobando si hay código que traer…';
+        selActs.appendChild(b);
+        // pregunta async si hay algo; habilita o deja gris ("ya traído"/"sin cambios").
+        fetch('/api/tareas/' + currentTarea.id + '/traible').then((r) => r.json()).then((s) => {
+          b.disabled = !s.traible;
+          b.title = s.traible ? 'Aplica al árbol vivo lo que Miguel construyó'
+            : (s.reason === 'ya traído' ? 'Ya traído al árbol vivo' : 'No hay cambios que traer');
+        }).catch(() => {});
+      }
+    } else {
+      const lbl = document.createElement('span');
+      lbl.innerHTML = active ? 'Escribe abajo para empezar el hilo'
+                             : 'Elige una conversación a la izquierda';
+      selInfo.appendChild(lbl);
+    }
+
+    for (const b of scopeSeg.querySelectorAll('.scope-btn')) {
+      b.classList.toggle('active', b.dataset.scope === scope);
+    }
+  }
+
+  function selActBtn(label, fn, special) {
+    const b = document.createElement('button');
+    b.className = 'sel-act' + (special ? ' special' : '');
+    b.textContent = label;
+    b.onclick = fn;
+    return b;
+  }
+
+  for (const b of scopeSeg.querySelectorAll('.scope-btn')) {
+    b.onclick = () => {
+      scope = b.dataset.scope;
+      // si pide mensaje/hilo sin rey, el scope se aplicará al último mensaje.
+      updateSelectionUI();
+    };
+  }
+
+  // El objetivo (targetId) de las acciones de agente: el rey si lo hay, si no el
+  // último mensaje del hilo (los endpoints siempre necesitan un mensaje válido).
+  function actionTarget() {
+    if (selectedId != null && findMsg(selectedId)) return selectedId;
+    return lastMsgId();
+  }
+  function lastMsgId() {
+    const ms = ((lastChat && lastChat.messages) || []).filter((m) => !m.collapsed);
+    return ms.length ? ms[ms.length - 1].id : null;
+  }
+
+  // ── editar ───────────────────────────────────────────────────────────────────
+  function startEdit(m) {
+    editTarget = m.id;
+    inputEl.value = m.text;
     banner.style.display = 'block';
-    banner.innerHTML = 'Respondiendo a <b>#' + id + '</b><a id="cancelReply">cancelar</a>';
-    banner.querySelector('#cancelReply').onclick = clearReplyTarget;
+    banner.innerHTML = 'Editando <b>#' + m.id + '</b><a id="confEdit">confirmar</a><a id="cancEdit">cancelar</a>';
+    banner.querySelector('#confEdit').onclick = confirmEdit;
+    banner.querySelector('#cancEdit').onclick = cancelEdit;
     inputEl.focus();
   }
-  function clearReplyTarget() {
-    replyTarget = null;
+  function cancelEdit() {
+    editTarget = null;
+    inputEl.value = '';
     banner.style.display = 'none';
     banner.innerHTML = '';
   }
+  async function confirmEdit() {
+    if (editTarget == null || !active) return;
+    const text = inputEl.value.trim();
+    if (!text) return;
+    const msgId = editTarget;
+    const res = await fetch('/api/chats/' + active + '/edit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msgId, text }),
+    });
+    if (!res.ok) { alert('No se pudo editar.'); return; }
+    cancelEdit();
+    lastSig = ''; refreshThread();
+  }
 
-  async function challenge(targetId) {
+  // ── enviar (Tie escribe) ──────────────────────────────────────────────────────
+  // charlar/responder cuelgan del REY si hay uno seleccionado (replyTo), si no, raíz.
+  async function responder() {
+    if (editTarget != null) return confirmEdit();
+    const text = inputEl.value.trim();
+    if (!text || !active) return;
+    const res = await fetch('/api/chats/' + active + '/responder', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, replyTo: selectedId }),
+    });
+    if (!res.ok) { alert('No se pudo enviar.'); return; }
+    inputEl.value = '';
+    lastSig = ''; refreshThread();  // punto final: nadie contesta
+  }
+
+  async function charlar() {
+    if (editTarget != null) return confirmEdit();
+    const text = inputEl.value.trim();
+    if (!text || !active) return;
+    btnCharlar.disabled = true;
+    const res = await fetch('/api/chats/' + active + '/charla', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, replyTo: selectedId }),
+    });
+    btnCharlar.disabled = false;
+    if (!res.ok) { alert('No se pudo enviar.'); return; }
+    const j = await res.json().catch(() => ({}));
+    inputEl.value = '';
+    pending = true; pendingBaseline = otherCount; pendingAuthor = 'iris';
+    pendingParent = j.pendingParent != null ? j.pendingParent
+      : (j.message && j.message.id != null ? j.message.id : null);
+    lastSig = ''; refreshThread();
+  }
+
+  // ── acciones de agente sobre (target, scope) ────────────────────────────────
+  // Convención común del contrato: body { scope, targetId, steer } → 202 { pendingParent }.
+  // `steer` (opción C) = lo que tengas escrito en la caja: un SUSURRO al agente
+  // que NO se publica en el chat; el personaje decide si lo menciona o no. Se
+  // consume (se vacía la caja) al enviarse.
+  async function spikeAction(path, author) {
     if (!active) return;
+    const targetId = actionTarget();
+    if (targetId == null && !currentTarea) { alert('No hay ningún mensaje sobre el que actuar. Escribe algo primero.'); return; }
+    const steer = inputEl.value.trim();
+    const res = await fetch('/api/chats/' + active + '/' + path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope, targetId, steer }),
+    });
+    if (!res.ok) { alert('No se pudo lanzar.'); return; }
+    const j = await res.json().catch(() => ({}));
+    if (steer) inputEl.value = '';
+    pending = true; pendingBaseline = otherCount; pendingAuthor = author;
+    pendingParent = j.pendingParent != null ? j.pendingParent : targetId;
+    lastSig = ''; refreshThread();
+  }
+
+  // Challenge usa el mismo (target, scope, steer). El motor cuelga la respuesta del objetivo.
+  async function challengeAction() {
+    if (!active) return;
+    const targetId = actionTarget();
+    if (targetId == null && !currentTarea) { alert('No hay ningún mensaje que cuestionar.'); return; }
+    const steer = inputEl.value.trim();
     const res = await fetch('/api/chats/' + active + '/challenge', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetId }),
+      body: JSON.stringify({ targetId, scope, steer }),
     });
     if (!res.ok) { alert('No se pudo lanzar el challenge.'); return; }
-    pending = true; pendingBaseline = otherCount; // fantasma hasta que William conteste
-    lastCount = -1; refreshThread(); // William aparecerá colgando del mensaje
+    const j = await res.json().catch(() => ({}));
+    if (steer) inputEl.value = '';
+    pending = true; pendingBaseline = otherCount; pendingAuthor = 'william';
+    pendingParent = j.pendingParent != null ? j.pendingParent : targetId;
+    lastSig = ''; refreshThread();
+  }
+
+  // ── Discutir: Romina y Ariel, turno a turno ──────────────────────────────────
+  // Genera UN solo mensaje. Si el rey NO es de la pareja, se elige autor y lado
+  // al AZAR. Si el rey YA es de la pareja, salta EL OTRO con el lado CONTRARIO.
+  // La réplica cuelga del rey (cadena) y la selección salta a ella, así el
+  // siguiente Discutir lo coge el otro y la pelea sigue mientras pulses.
+  async function discutir() {
+    if (!active) return;
+    const targetId = actionTarget();
+    if (targetId == null && !currentTarea) { alert('No hay nada sobre lo que discutir.'); return; }
+    const king = findMsg(targetId);
+    let author, stance;
+    const flip = (s) => (s === 'defiende' ? 'rechaza' : s === 'rechaza' ? 'defiende' : null);
+    if (king && (king.author === 'romina' || king.author === 'ariel')) {
+      author = king.author === 'romina' ? 'ariel' : 'romina';        // el otro de la pareja
+      stance = flip(king.stance) || (Math.random() < 0.5 ? 'defiende' : 'rechaza'); // el lado contrario
+    } else {
+      author = Math.random() < 0.5 ? 'romina' : 'ariel';             // azar
+      stance = Math.random() < 0.5 ? 'defiende' : 'rechaza';         // azar
+    }
+    const steer = inputEl.value.trim();
+    const res = await fetch('/api/chats/' + active + '/discutir', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope, targetId, author, stance, steer }),
+    });
+    if (!res.ok) { alert('No se pudo lanzar la discusión.'); return; }
+    const j = await res.json().catch(() => ({}));
+    if (steer) inputEl.value = '';
+    pending = true; pendingBaseline = otherCount; pendingAuthor = author;
+    pendingParent = j.pendingParent != null ? j.pendingParent : targetId;
+    selectAfterReply = true;   // al llegar la réplica, el rey salta a ella
+    lastSig = ''; refreshThread();
+  }
+
+  // ── Anselmo (resumir) + compactar ────────────────────────────────────────────
+  async function anselmo() {
+    if (!active) return;
+    const steer = inputEl.value.trim();   // lo escrito (o el pantallazo): susurro, no se pierde
+    const res = await fetch('/api/chats/' + active + '/anselmo', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ steer }),
+    });
+    if (!res.ok) { alert('No se pudo resumir.'); return; }
+    const j = await res.json().catch(() => ({}));
+    if (steer) inputEl.value = '';
+    pending = true; pendingBaseline = otherCount; pendingAuthor = 'anselmo';
+    pendingParent = j.pendingParent != null ? j.pendingParent : lastMsgId();
+    lastSig = ''; refreshThread();
+  }
+  async function compactar(noteId) {
+    if (!active) return;
+    const res = await fetch('/api/chats/' + active + '/compactar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ noteId }),
+    });
+    if (!res.ok) { alert('No se pudo compactar.'); return; }
+    lastSig = ''; refreshThread();
+  }
+
+  // ── Aubé (crear tarea) + aprobar ─────────────────────────────────────────────
+  async function aube() {
+    if (!active) return;
+    const steer = inputEl.value.trim();   // lo escrito (o el pantallazo): susurro a Aubé, no se pierde
+    const res = await fetch('/api/chats/' + active + '/aube', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ steer }),
+    });
+    if (!res.ok) { alert('No se pudo crear la tarea.'); return; }
+    const j = await res.json().catch(() => ({}));
+    if (steer) inputEl.value = '';
+    if (!j.replacing) {
+      pending = true; pendingBaseline = otherCount; pendingAuthor = 'aube';
+      pendingParent = j.pendingParent;
+    }
+    lastSig = ''; refreshThread();
+  }
+  async function aprobarTarea() {
+    if (!active) return;
+    const res = await fetch('/api/tareas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromChat: active }),
+    });
+    if (!res.ok) { alert('No se pudo aprobar la tarea.'); return; }
+    loadTareas();
   }
 
   async function refreshThread() {
@@ -371,55 +1234,335 @@
     const chat = await res.json();
     const msgs = chat.messages || [];
     otherCount = msgs.filter((m) => m.author !== 'tie').length;
-    // llegó una respuesta de un headless → apaga el fantasma.
-    if (pending && otherCount > pendingBaseline) pending = false;
+    let justArrived = false;
+    if (pending && otherCount > pendingBaseline) { pending = false; justArrived = true; }
+    // Discutir: al llegar la réplica de Romina/Ariel el rey salta a ella, para
+    // que el siguiente Discutir lo coja el otro de la pareja.
+    if (justArrived && selectAfterReply) {
+      const mine = msgs.filter((m) => !m.collapsed && m.author === pendingAuthor);
+      const real = msgs.filter((m) => !m.collapsed);
+      if (mine.length) selectedId = mine[mine.length - 1].id;
+      else if (real.length) selectedId = real[real.length - 1].id;
+      selectAfterReply = false;
+    }
     const n = msgs.length;
-    if (n !== lastCount || pending !== lastPending) {
-      lastCount = n; lastPending = pending; renderThread(chat);
+    const sig = msgs.map((m) =>
+      m.id + ':' + (m.text || '').length + ':' + (m.collapsed ? 1 : 0) + ':' + m.replyTo + ':' + (m.editedAt || '')).join('|');
+    if (n !== lastCount || pending !== lastPending || sig !== lastSig) {
+      lastCount = n; lastPending = pending; lastSig = sig; renderThread(chat);
     }
   }
 
-  function openChat(id) {
+  // Abre un chat en el centro. `tarea` (F9b) = la tarea cuya pizarra es este hilo:
+  // si viene, se pinta su definición FIJA arriba; si no, es una conversación normal.
+  function openChat(id, tarea = null) {
     active = id;
-    lastCount = -1;
-    lastPending = false;
-    pending = false;
-    otherCount = 0;
-    clearReplyTarget();
+    currentTarea = tarea || null;
+    lastCount = -1; lastPending = false; lastSig = '';
+    pending = false; otherCount = 0; pendingParent = null; pendingAuthor = 'iris';
+    selectedId = null; scope = 'mensaje'; editTarget = null; selectAfterReply = false;
+    cancelEdit();
     inputEl.disabled = false;
-    btnCharlar.disabled = false;
+    for (const b of composerBtns) b.disabled = false;
+    btnWand.disabled = false;
+    updateSelectionUI();
+    renderTareaDef();
     refreshThread();
     loadList();
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(refreshThread, 1500); // ve llegar las respuestas de los headless
   }
 
-  async function charlar() {
-    const text = inputEl.value.trim();
-    if (!text || !active) return;
-    btnCharlar.disabled = true;
-    const res = await fetch('/api/chats/' + active + '/charla', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, replyTo: replyTarget }),
-    });
-    btnCharlar.disabled = false;
-    if (!res.ok) { alert('No se pudo enviar.'); return; }
-    inputEl.value = '';
-    clearReplyTarget();
-    pending = true; pendingBaseline = otherCount; // fantasma hasta que conteste el headless
-    lastCount = -1;
-    refreshThread();
+  // ── F9b: abrir una tarea (clic en la columna derecha) ────────────────────────
+  // Pide su hilo propio (lo crea perezoso la 1ª vez) y abre ese hilo con la
+  // definición fija arriba. El hilo es un chat normal: charlar/challenge/… valen.
+  async function openTarea(id) {
+    let t;
+    try { t = await (await fetch('/api/tareas/' + id + '/open', { method: 'POST' })).json(); }
+    catch { alert('No se pudo abrir la tarea.'); return; }
+    if (!t || !t.threadId) { alert('No se pudo abrir la tarea.'); return; }
+    openChat(t.threadId, t);
+    loadTareas();
   }
 
-  btnCharlar.onclick = charlar;
-  // Enter envía, Shift+Enter salto de línea.
+  // Pinta (o esconde) el bloque fijo con la definición de la tarea actual.
+  function renderTareaDef() {
+    if (!currentTarea) { tareaDefEl.style.display = 'none'; tareaDefEl.innerHTML = ''; return; }
+    const t = currentTarea;
+    tareaDefEl.style.display = 'block';
+    tareaDefEl.innerHTML = '';
+    const eye = document.createElement('div'); eye.className = 'td-eyebrow';
+    eye.textContent = 'Tarea #' + t.id;
+    const h = document.createElement('h2'); h.textContent = t.title || ('Tarea ' + t.id);
+    const body = document.createElement('div'); body.className = 'td-body'; body.textContent = t.body || '(sin definición todavía)';
+    const acts = document.createElement('div'); acts.className = 'td-acts';
+    const edit = document.createElement('button'); edit.className = 'td-btn'; edit.textContent = '✎ Editar definición';
+    edit.onclick = startEditTareaDef;
+    const rev = document.createElement('button'); rev.className = 'td-btn'; rev.textContent = '✦ Revisar (Aubé)';
+    rev.disabled = true; rev.title = 'Próximamente: Aubé reescribe la definición desde el hilo';
+    const ejec = document.createElement('button'); ejec.className = 'td-btn'; ejec.textContent = '🔨 Ejecutar';
+    ejec.title = 'Miguel construye la tarea en un worktree aislado y reporta en el hilo';
+    ejec.onclick = () => ejecutarTarea(t.id);
+    acts.append(edit, ejec, rev);
+    // "Traer el código" YA NO vive aquí: cuelga del informe de Miguel en el hilo
+    // (es de quien construyó), igual que Aprobar cuelga de Aubé.
+    tareaDefEl.append(eye, h, body, acts);
+  }
+
+  // Traer: aplica el código del worktree de Miguel al árbol vivo (merge a 3 vías).
+  // Si choca, el REVISOR lo resuelve y SIEMPRE completa el merge (reporta en el hilo).
+  async function traerTarea(id) {
+    if (!confirm('¿Traer a tu árbol vivo el código que construyó Miguel?\n\nSe aplican sus cambios encima de lo que tienes ahora; si chocan, el revisor resuelve el merge.')) return;
+    let j;
+    try { j = await (await fetch('/api/tareas/' + id + '/traer', { method: 'POST' })).json(); }
+    catch { alert('No se pudo traer.'); return; }
+    if (j.applied) alert('✅ Código traído al árbol vivo.\nSi tocó el back, reinicia el forge; refresca para ver los cambios del front.');
+    else if (j.empty) alert('Miguel no dejó cambios en su worktree.');
+    else if (j.incompatible) alert('⚠️ ' + (j.error || 'El build no encaja con tu árbol actual.') + '\n\n(Este build es viejo: vuelve a pulsar 🔨 Ejecutar.)');
+    else if (j.resolving) {
+      // el revisor está resolviendo en vivo: que se vea su mensaje aparecer en el hilo.
+      pending = true; pendingBaseline = otherCount; pendingAuthor = 'revisor'; pendingParent = null;
+      lastSig = ''; refreshThread();
+    } else alert('No se pudo traer: ' + (j.error || 'error'));
+  }
+
+  // Ejecutar: lanza a Miguel a construir la tarea (worktree aislado). Reporta en el hilo.
+  async function ejecutarTarea(id) {
+    if (!confirm('¿Ejecutar la tarea?\n\nMiguel la construye en una copia aislada (worktree), sin tocar el árbol vivo, y reporta aquí cuando termine (tarda un rato).')) return;
+    let j;
+    try {
+      j = await (await fetch('/api/tareas/' + id + '/ejecutar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steer: inputEl.value.trim() }),
+      })).json();
+    } catch { alert('No se pudo ejecutar.'); return; }
+    if (!j || !j.spawned) { alert('No se pudo ejecutar: ' + ((j && j.error) || 'error')); return; }
+    inputEl.value = '';
+    // ya NO ponemos fantasma "pensando": Miguel tiene un mensaje VIVO que se va
+    // reescribiendo con el resumen en vivo (Haiku). El sondeo lo muestra y actualiza.
+    lastSig = ''; refreshThread();
+  }
+
+  // Edición a mano de la definición: cambia título/cuerpo por campos editables.
+  function startEditTareaDef() {
+    if (!currentTarea) return;
+    const t = currentTarea;
+    tareaDefEl.innerHTML = '';
+    const eye = document.createElement('div'); eye.className = 'td-eyebrow'; eye.textContent = 'Editando tarea #' + t.id;
+    const ti = document.createElement('input'); ti.className = 'td-edit'; ti.value = t.title || ''; ti.placeholder = 'Título';
+    const bo = document.createElement('textarea'); bo.className = 'td-edit'; bo.value = t.body || ''; bo.placeholder = 'Definición de la tarea';
+    const acts = document.createElement('div'); acts.className = 'td-acts';
+    const save = document.createElement('button'); save.className = 'td-btn'; save.textContent = 'Guardar';
+    const cancel = document.createElement('button'); cancel.className = 'td-btn'; cancel.textContent = 'Cancelar';
+    save.onclick = async () => {
+      try {
+        const upd = await (await fetch('/api/tareas/' + t.id + '/definicion', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: ti.value, body: bo.value }),
+        })).json();
+        currentTarea = { ...t, ...upd };
+      } catch { alert('No se pudo guardar la definición.'); }
+      renderTareaDef(); loadTareas();
+    };
+    cancel.onclick = renderTareaDef;
+    acts.append(save, cancel);
+    tareaDefEl.append(eye, ti, bo, acts);
+    ti.focus();
+  }
+
+  // ── enlaces de los botones del compositor ───────────────────────────────────
+  // El botón que pulses se vuelve el DEFECTO (resaltado) y es lo que dispara
+  // Enter. Se recuerda entre recargas (localStorage).
+  const ACTIONS = {
+    responder:  { btn: btnResponder,  run: responder },
+    charlar:    { btn: btnCharlar,    run: charlar },
+    investigar: { btn: btnInvestigar, run: () => spikeAction('investigar', 'stevens') },
+    consejo:    { btn: btnConsejo,    run: () => spikeAction('consejo', 'miyagi') },
+    discutir:   { btn: btnDiscutir,   run: discutir },
+    challenge:  { btn: btnChallenge,  run: challengeAction },
+    tarea:      { btn: btnTarea,      run: aube },
+    resumir:    { btn: btnResumir,    run: anselmo },
+  };
+  let defaultAction = localStorage.getItem('forge.defaultAction') || 'charlar';
+  if (!ACTIONS[defaultAction]) defaultAction = 'charlar';
+
+  function setDefaultAction(key) {
+    defaultAction = key;
+    localStorage.setItem('forge.defaultAction', key);
+    for (const [k, a] of Object.entries(ACTIONS)) a.btn.classList.toggle('primary', k === defaultAction);
+  }
+  for (const [k, a] of Object.entries(ACTIONS)) {
+    a.btn.onclick = () => { setDefaultAction(k); a.run(); };
+  }
+  setDefaultAction(defaultAction); // pinta el defecto al cargar
+
+  // ── doble modo de envío + autocrecer ────────────────────────────────────────
+  // El área crece sola con el texto hasta 10 líneas y luego hace scroll. El modo
+  // de envío decide qué hace Enter, y persiste entre recargas:
+  //   · 'send'    → Enter envía, Shift+Enter salta línea (el clásico de chat).
+  //   · 'newline' → Enter salta línea, Ctrl/⌘+Enter envía (cómodo para textos largos).
+  const sendModeSeg = document.getElementById('sendModeSeg');
+  let sendMode = localStorage.getItem('forge.sendMode') || 'send';
+  if (sendMode !== 'send' && sendMode !== 'newline') sendMode = 'send';
+  function setSendMode(m) {
+    sendMode = m;
+    localStorage.setItem('forge.sendMode', m);
+    for (const b of sendModeSeg.querySelectorAll('button')) b.classList.toggle('active', b.dataset.mode === m);
+  }
+  for (const b of sendModeSeg.querySelectorAll('button')) b.onclick = () => setSendMode(b.dataset.mode);
+  setSendMode(sendMode);
+
+  function fireSend() {
+    if (editTarget != null) confirmEdit(); else ACTIONS[defaultAction].run();
+  }
   inputEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); charlar(); }
+    if (e.key !== 'Enter') return;
+    const withMod = e.ctrlKey || e.metaKey;
+    if (sendMode === 'send') {
+      if (!e.shiftKey && !withMod) { e.preventDefault(); fireSend(); }   // Enter envía
+    } else {
+      if (withMod) { e.preventDefault(); fireSend(); }                   // Ctrl/⌘+Enter envía
+    }
   });
 
-  document.getElementById('newCycle').onclick = async () => {
-    if (!confirm('Nuevo ciclo: borra TODAS las conversaciones y abre el backlog.\nSolo funciona si el producto (project/) está limpio.\n\n¿Seguir?')) return;
+  // Autocrecer: ajusta la altura al contenido (máx. 10 líneas vía max-height CSS).
+  function autoGrow() {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 232) + 'px';
+  }
+  inputEl.addEventListener('input', autoGrow);
+  // tras un envío el código vacía .value sin disparar 'input'; al volver a la caja
+  // recolocamos la altura para que no se quede estirada en falso.
+  inputEl.addEventListener('focus', autoGrow);
+
+  // Pegar un pantallazo: si el portapapeles trae imagen, la subimos a
+  // pantallazos/ y metemos su ruta en el mensaje (en el cursor). Sin dar vueltas.
+  function insertAtCursor(el, text) {
+    const s = (el.selectionStart != null) ? el.selectionStart : el.value.length;
+    const e2 = (el.selectionEnd != null) ? el.selectionEnd : el.value.length;
+    el.value = el.value.slice(0, s) + text + el.value.slice(e2);
+    el.selectionStart = el.selectionEnd = s + text.length;
+  }
+  inputEl.addEventListener('paste', async (e) => {
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    const imgs = [...items].filter((it) => it.kind === 'file' && it.type.startsWith('image/'));
+    if (!imgs.length) return;            // pegado de texto normal: que siga su curso
+    e.preventDefault();
+    for (const it of imgs) {
+      const blob = it.getAsFile();
+      if (!blob) continue;
+      try {
+        const res = await fetch('/api/pantallazo', {
+          method: 'POST', headers: { 'Content-Type': blob.type || 'image/png' }, body: blob,
+        });
+        const j = await res.json().catch(() => ({}));
+        if (res.ok && j.path) insertAtCursor(inputEl, j.path + ' ');
+        else alert('No se pudo guardar el pantallazo.');
+      } catch { alert('No se pudo subir el pantallazo.'); }
+    }
+    inputEl.focus();
+  });
+
+  // ── título: editable al clic + varita de nombre automático ──────────────────
+  async function saveTitle(title) {
+    if (!active) return;
+    const res = await fetch('/api/chats/' + active + '/title', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!res.ok) { titleEl.textContent = currentTitle; return; }
+    const j = await res.json();
+    currentTitle = j.chat.title;
+    titleEl.textContent = currentTitle;
+    loadList();
+  }
+
+  titleEl.addEventListener('click', () => {
+    if (!active || titleEl.getAttribute('contenteditable') === 'true') return;
+    titleEl.setAttribute('contenteditable', 'true');
+    titleEl.focus();
+    const sel = window.getSelection();
+    if (sel) { sel.selectAllChildren(titleEl); }
+  });
+  titleEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); }
+    else if (e.key === 'Escape') { titleEl.textContent = currentTitle; titleEl.blur(); }
+  });
+  titleEl.addEventListener('blur', () => {
+    titleEl.setAttribute('contenteditable', 'false');
+    const t = titleEl.textContent.replace(/\s+/g, ' ').trim();
+    if (!t || t === currentTitle) { titleEl.textContent = currentTitle; return; }
+    saveTitle(t);
+  });
+
+  btnWand.onclick = async () => {
+    if (!active || btnWand.disabled) return;
+    btnWand.disabled = true; btnWand.classList.add('busy');
+    try {
+      const res = await fetch('/api/chats/' + active + '/autoname', { method: 'POST' });
+      if (res.ok) {
+        const j = await res.json();
+        currentTitle = j.chat.title;
+        titleEl.textContent = currentTitle;
+        loadList();
+      } else {
+        alert('No se pudo generar el nombre.');
+      }
+    } catch {
+      alert('No se pudo generar el nombre.');
+    }
+    btnWand.classList.remove('busy');
+    btnWand.disabled = false;
+  };
+
+  // ── las dos PUERTAS-parada del carril: abren un popover de ajustes ──────────
+  // Una sola abierta a la vez; clic fuera la cierra. NO son botones de acción.
+  const popNew = document.getElementById('popNew');
+  const popFin = document.getElementById('popFin');
+  function closeGates() { popNew.classList.remove('open'); popFin.classList.remove('open'); }
+  function toggleGate(pop) {
+    const willOpen = !pop.classList.contains('open');
+    closeGates();
+    if (willOpen) pop.classList.add('open');
+  }
+  document.getElementById('gateNewBtn').onclick = (e) => { e.stopPropagation(); syncNewGate(); toggleGate(popNew); };
+  document.getElementById('gateFinBtn').onclick = (e) => { e.stopPropagation(); toggleGate(popFin); };
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.gate')) closeGates();
+  });
+
+  // Ajustes dentro de "Nuevo ciclo": objetivo (forge/producto) + nombre de rama.
+  const newTargetSeg = document.getElementById('newTargetSeg');
+  const newBranch = document.getElementById('newBranch');
+  let newTargetChoice = (cycle && cycle.target) || 'forge';
+  function syncNewGate() {
+    newTargetChoice = (cycle && cycle.target) || newTargetChoice || 'forge';
+    for (const b of newTargetSeg.querySelectorAll('button')) {
+      b.classList.toggle('active', b.dataset.target === newTargetChoice);
+    }
+    if (!newBranch.value) newBranch.value = (getBranch() === 'sin rama' ? '' : getBranch());
+  }
+  for (const b of newTargetSeg.querySelectorAll('button')) {
+    b.onclick = () => {
+      newTargetChoice = b.dataset.target;
+      for (const x of newTargetSeg.querySelectorAll('button')) x.classList.toggle('active', x === b);
+    };
+  }
+
+  // El GUARDIÁN fuerte del borrado vive AQUÍ (ya no en Avanzar): el botón rojo de
+  // la puerta de entrada. Confirma, fija objetivo + rama, y barre el taller.
+  document.getElementById('newStart').onclick = async () => {
+    if (!confirm('Empezar un ciclo nuevo borra TODAS las conversaciones del taller y abre el backlog.\nSolo funciona si el producto (project/) está limpio.\n\n¿Seguir?')) return;
+    // fija el objetivo elegido en la puerta antes de arrancar (si cambió).
+    if (cycle && newTargetChoice && newTargetChoice !== cycle.target) {
+      try {
+        cycle = await (await fetch('/api/cycle/target', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target: newTargetChoice }),
+        })).json();
+      } catch {}
+    }
+    setBranch(newBranch.value.trim());
     const res = await fetch('/api/cycle/new', { method: 'POST' });
     if (res.status === 409) {
       const j = await res.json();
@@ -430,14 +1573,18 @@
     }
     if (!res.ok) { alert('No se pudo empezar el ciclo.'); return; }
     const j = await res.json();
+    closeGates();
+    loadCycle();           // el ciclo vuelve a Spike: refresca el carril
     await loadList();
-    openChat(j.chat.id); // el sondeo mostrará la apertura de Iris al llegar
+    openChat(j.chat.id);
+    pending = true; pendingBaseline = 0; pendingParent = null; pendingAuthor = 'iris';
+    lastSig = ''; refreshThread();
   };
 
   document.getElementById('newChat').onclick = async () => {
     const res = await fetch('/api/chats', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'tarea' }),
+      body: JSON.stringify({ type: 'charla' }),
     });
     if (!res.ok) { alert('No se pudo crear la conversación.'); return; }
     const c = await res.json();
@@ -445,7 +1592,7 @@
     openChat(c.id);
   };
 
-  // plegado de la columna izquierda (recuerda el estado entre recargas)
+  // ── plegado de columnas (recuerda el estado entre recargas) ─────────────────
   const toggleLeft = document.getElementById('toggleLeft');
   function applyLeftState() {
     const collapsed = localStorage.getItem('forge.leftCollapsed') === '1';
@@ -474,7 +1621,63 @@
   };
   applyRightState();
 
-  loadList();
+  // ── selector de modelo (global: aplica a TODOS los headless) ────────────────
+  const modelPickerEl = document.getElementById('modelPicker');
+  async function loadModel() {
+    try {
+      const res = await fetch('/api/model');
+      if (!res.ok) throw new Error('no model');
+      const { model, choices } = await res.json();
+      modelPickerEl.innerHTML = '';
+      (choices || []).forEach((c) => {
+        const opt = document.createElement('option');
+        opt.value = c.value; opt.textContent = c.label;
+        if (c.value === (model || '')) opt.selected = true;
+        modelPickerEl.appendChild(opt);
+      });
+      modelPickerEl.disabled = false;
+    } catch {
+      // si la forja aún no expone /api/model, apaga el selector (sin sorpresas).
+      modelPickerEl.innerHTML = '<option>—</option>';
+      modelPickerEl.disabled = true;
+    }
+  }
+  modelPickerEl.onchange = async () => {
+    try {
+      const res = await fetch('/api/model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelPickerEl.value }),
+      });
+      if (!res.ok) throw new Error('save failed');
+    } catch { alert('No se pudo guardar el modelo.'); }
+  };
+
+  // ── arranque ─────────────────────────────────────────────────────────────────
+  async function init() {
+    loadCycle();
+    loadModel();
+    loadTareas();
+    updateSelectionUI();
+    const chats = await loadList();
+    if (!chats || !chats.length) {
+      try {
+        const res = await fetch('/api/chats/bootstrap', { method: 'POST' });
+        if (res.ok) {
+          const j = await res.json();
+          await loadList();
+          openChat(j.chat.id);
+          if (j.spawned) {
+            pending = true; pendingBaseline = 0; pendingParent = null; pendingAuthor = 'iris';
+            lastSig = ''; refreshThread();
+          }
+        }
+      } catch {}
+      return;
+    }
+    openChat(chats[chats.length - 1].id); // la más reciente
+  }
+  init();
 </script>
 </body>
 </html>

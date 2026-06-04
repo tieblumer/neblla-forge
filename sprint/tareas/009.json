@@ -1,0 +1,8 @@
+{
+  "id": "009",
+  "num": 9,
+  "title": "Mover \"cierre\" y \"finalizar ciclo\" a las flechas de navegación",
+  "body": "Ahora mismo \"cierre\" / \"finalizar ciclo\" están fuera del flujo. Tie quiere que sean un estado más del recorrido (como plan → diana → build → release), de modo que se naveguen con las flechitas izquierda/derecha igual que el resto de pasos, no como un botón o sección aparte.",
+  "fromChat": "018",
+  "createdAt": "2026-06-04T21:13:54.296Z"
+}

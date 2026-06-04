@@ -1,0 +1,8 @@
+{
+  "id": "008",
+  "num": 8,
+  "title": "Aubé aprende a trocear una tarea en subtareas paralelas",
+  "body": "Hoy toda tarea nace con una sola subtarea `main` de alcance completo. Eso sigue siendo el default. Lo nuevo: cuando el plan tiene piezas que no se pisan, Aubé decide partirlo en varias subtareas y a cada una le fija su ALCANCE (qué trozo le toca, hasta dónde llega, qué NO debe tocar). El plan completo sigue viviendo en la tarea; la subtarea solo recorta el carril.\n\nTres decisiones a resolver:\n\n1. **Cuándo partir.** Solo si los trozos son de verdad independientes: tocan ficheros/carpetas distintos, no comparten estado y no hay dependencia de orden (back vs front es el caso típico). Si comparten superficie o uno necesita lo del otro → no se parte, queda `main`.\n\n2. **Cómo describir el alcance.** Cada subtarea lleva su carril explícito: archivos/zonas que le tocan, la frontera (hasta dónde) y un \"no tocar\" claro, para que el programador no se salga. El cómo y el detalle siguen en el plan de la tarea.\n\n3. **Colisión.** Qué pasa si dos subtareas tocan lo mismo sin querer: quién lo detecta, cómo se resuelve. El motor ya ayuda (el icono del padre asume el de la subtarea menos avanzada y el contenedor se abre solo al divergir), pero falta definir la mecánica de detección/resolución del solape.\n\nEl motor y la UI ya están listos. La pieza nueva es el cerebro de Aubé: el criterio para trocear y repartir.",
+  "fromChat": "019",
+  "createdAt": "2026-06-04T21:13:45.022Z"
+}

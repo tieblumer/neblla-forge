@@ -1,0 +1,8 @@
+{
+  "id": "010",
+  "num": 10,
+  "title": "Bloquear el cambio de forge/proyecto fuera de \"Nuevo ciclo\"",
+  "body": "El selector de forge y el de proyecto solo deben poder cambiarse cuando estamos en un Nuevo ciclo. En cualquier otro estado, esos controles deben quedar bloqueados (deshabilitados) para evitar cambiar de forge o de proyecto a mitad de un ciclo en curso.",
+  "fromChat": "017",
+  "createdAt": "2026-06-04T21:14:07.176Z"
+}

@@ -8,6 +8,9 @@ node_modules
 # forge UI (npm run forge) — las conversaciones son demasiado efímeras para git;
 # solo generarían ruido. Cada sprint arranca limpio. Viven solo en el working tree.
 sprint/chats/
+sprint/cycle.json
+# pantallazos pegados en el chat (working-tree only, como las conversaciones).
+pantallazos/
 
 # forge machinery transient artifacts — never committed.
 scripts/_work/

@@ -15,24 +15,32 @@
  * log de depuración va a stderr; un console.log rompería el protocolo.
  */
 
-import { appendMessage } from './lib/forge-store.js';
+import { appendMessage, replaceMessageText } from './lib/forge-store.js';
 
 const ROOT = process.env.FORGE_ROOT || process.cwd();
 const CHAT_ID = process.env.FORGE_CHAT_ID || null;
 const REPLY_TO = process.env.FORGE_REPLY_TO ? Number(process.env.FORGE_REPLY_TO) : null;
+// Aubé escribe UN solo mensaje vivo: si se le pasa FORGE_REPLACE_MSG_ID, `contestar`
+// REEMPLAZA ese mensaje (no añade) — así su mensaje converge en vez de acumularse.
+const REPLACE_MSG_ID = process.env.FORGE_REPLACE_MSG_ID ? Number(process.env.FORGE_REPLACE_MSG_ID) : null;
 // El mismo `contestar` sirve para la charla (answer) y para la apertura del
 // backlog (opener); el tipo/intención del mensaje los fija quien lanza el headless.
 const MSG_TYPE = process.env.FORGE_MSG_TYPE || 'charla';
 const INTENT = process.env.FORGE_INTENT || 'answer';
 const AUTHOR = process.env.FORGE_AUTHOR || 'iris';
+// Discutir: el lado de la pareja (defiende|rechaza) se persiste en el mensaje para
+// que el front sepa qué lado tomar en el turno siguiente. Vacío en el resto.
+const STANCE = process.env.FORGE_STANCE || null;
 
 const TOOL = {
   name: 'contestar',
-  description: 'Publica tu respuesta en la charla con Tie. Es tu única acción posible.',
+  description: 'Publica tu mensaje en la conversación del forge. Es tu única acción posible: '
+    + 'lo usa cualquier personaje (Iris, William, Stevens, Miyagi, Romina/Ariel, Anselmo, Aubé…). '
+    + 'El autor y el tipo del mensaje los fija quien te lanzó.',
   inputSchema: {
     type: 'object',
     properties: {
-      text: { type: 'string', description: 'El texto de tu respuesta para Tie.' },
+      text: { type: 'string', description: 'El texto de tu mensaje para la conversación.' },
     },
     required: ['text'],
     additionalProperties: false,
@@ -86,16 +94,26 @@ function handle(msg) {
         return reply(id, { isError: true, content: [{ type: 'text', text: 'No sé a qué chat contestar (falta FORGE_CHAT_ID).' }] });
       }
       try {
-        const created = appendMessage(ROOT, CHAT_ID, {
-          type: MSG_TYPE,
-          author: AUTHOR,
-          intent: INTENT,
-          replyTo: REPLY_TO,
-          text,
-        });
-        reply(id, {
-          content: [{ type: 'text', text: `Contestación publicada en el chat ${CHAT_ID} (mensaje #${created.id}, en respuesta a #${REPLY_TO}).` }],
-        });
+        let created;
+        if (REPLACE_MSG_ID != null) {
+          // mensaje vivo (Aubé): reescribe el mismo mensaje, conserva su sitio.
+          created = replaceMessageText(ROOT, CHAT_ID, REPLACE_MSG_ID, text);
+          reply(id, {
+            content: [{ type: 'text', text: `Mensaje #${created.id} reescrito en el chat ${CHAT_ID}.` }],
+          });
+        } else {
+          created = appendMessage(ROOT, CHAT_ID, {
+            type: MSG_TYPE,
+            author: AUTHOR,
+            intent: INTENT,
+            replyTo: REPLY_TO,
+            text,
+            stance: STANCE,
+          });
+          reply(id, {
+            content: [{ type: 'text', text: `Contestación publicada en el chat ${CHAT_ID} (mensaje #${created.id}, en respuesta a #${REPLY_TO}).` }],
+          });
+        }
       } catch (e) {
         reply(id, { isError: true, content: [{ type: 'text', text: 'No pude publicar: ' + e.message }] });
       }

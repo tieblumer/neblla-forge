@@ -1,0 +1,13 @@
+{
+  "id": "003",
+  "num": 3,
+  "title": "Estado por tarea en el panel derecho (checklist viva, determinista)",
+  "body": "QUÉ: dar a cada tarea un `estado` y una lista de `subtareas`, y que el panel derecho las agrupe y ordene solo: en curso arriba → por hacer → terminadas. Nadie arrastra nada a mano; el estado lo escupe el motor del forge y la UI solo lo pinta.\n\nMODELO: una tarea es siempre tarea → subtareas. Si no se paraleliza, Aubeline crea una sola subtarea de alcance completo llamada `main` (sin caso especial). Empezamos solo con `main`; la paralelización real (partir el plan en varias subtareas) es otro hilo y otro sprint.\n\nICONOS (escalera por subtarea): ▢ pendiente → ⏳ cogida → 🌳 mergeada → ✕ cerrada; y ✕ roja = petó/revisar.\n- La tarea padre asume el icono de su subtarea MENOS avanzada.\n- El rojo SIEMPRE gana: sube al icono del padre y fuerza el despliegue (un fallo nunca queda escondido tras un hermano terminado). Los errores se arreglan antes que nada.\n- Confirmar con Tie si \"mergeada\" y \"cerrada\" son dos peldaños o uno.\n\nUI:\n- Cada tarea: icono de estado + título cortísimo + descripción en rollover.\n- Barrita horizontal clicable que despliega el contenedor de subtareas; cada subtarea se pinta igual que el título.\n- Despliegue automático si las subtareas tienen iconos distintos (divergen); manual si el usuario hace click.\n- Al abrir una tarea se ve en grande su plan de implementación.\n\nORDEN DE TRABAJO (Miyagi): primero el pulso, luego el rostro — conectar cada icono a una señal que el ciclo YA emite (cogida/mergeada/cerrada/petó) antes de pintar la lista, o el icono mentirá igual de bonito.",
+  "fromChat": "010",
+  "createdAt": "2026-06-04T20:52:09.631Z",
+  "threadId": "021",
+  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t003-1780606345059",
+  "branch": "miguel/tarea-003-1780606345059",
+  "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
+  "builtAt": "2026-06-04T20:52:25.495Z"
+}
