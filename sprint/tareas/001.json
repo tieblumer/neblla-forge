@@ -6,5 +6,10 @@
   "fromChat": "006",
   "createdAt": "2026-06-03T22:38:55.077Z",
   "threadId": "007",
-  "editedAt": "2026-06-03T23:01:39.361Z"
+  "editedAt": "2026-06-03T23:01:39.361Z",
+  "brought": true,
+  "broughtAt": "2026-06-04T22:19:58.014Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-04T22:19:58.014Z",
+  "masterCommit": "4b101bb98a4d7dc08d6723945816f93e743c28b8"
 }

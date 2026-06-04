@@ -9,5 +9,10 @@
   "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t004-1780606387324",
   "branch": "miguel/tarea-004-1780606387324",
   "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
-  "builtAt": "2026-06-04T20:53:07.827Z"
+  "builtAt": "2026-06-04T20:53:07.827Z",
+  "brought": true,
+  "broughtAt": "2026-06-04T22:19:58.028Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-04T22:19:58.028Z",
+  "masterCommit": "4b101bb98a4d7dc08d6723945816f93e743c28b8"
 }
