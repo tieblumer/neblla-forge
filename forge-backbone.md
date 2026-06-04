@@ -94,8 +94,10 @@ paso actual deja **listo para entregar** al siguiente.
 > que se está cerrando para entregar a la etapa siguiente.
 
 ### 🧪 SPIKE
-**Objetivo:** explorar libre y barato. Tantear ideas en un taller desechable, antes de
-comprometerse a nada.
+**Objetivo:** **creación rápida de las features que salen de la conversación.** No es solo
+charlar: en Spike **se construye** —rápido y guarreto, en un taller desechable— para ver las
+funcionalidades vivas, sacar ideas y adelantarse a los errores antes de comprometerse a nada. El
+código del taller se tira al cerrar (ver F15.1: sobreviven los tests y la biblia).
 - **Izquierda — qué se ve:** las conversaciones del taller (las "historias" abiertas de
   exploración), como hoy.
 - **Centro — personajes y herramientas:** la **barra de acciones común** (F22) que actúa sobre el
