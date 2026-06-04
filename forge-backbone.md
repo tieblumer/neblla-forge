@@ -342,6 +342,25 @@ medias).
 > Esa palanca se sustituye por el mando de transporte de F21; el borrado pasa a ser un efecto del
 > cruce Spike→Grooming.)*
 
+### F15.1 — Qué sobrevive al spike: revert al estado original (decisión de Tie, 2026-06-05)
+El **Spike es código guarreto a propósito**: se pica sucio para **ver las funcionalidades en vivo**,
+sacar ideas y **adelantarse a los errores** antes de comprometerse a nada. Ese código **no se
+queda** — es del taller de usar y tirar.
+
+Al cerrar el spike y pasar a firme, el árbol **se revierte al ESTADO ORIGINAL de antes del spike**:
+el guarreto se tira entero. Pero **dos artefactos sobreviven** a la base limpia:
+- los **tests** que diseñó **Ana Liz** (la diana), y
+- la **biblia** que escribió **Anselmo** (lo aprendido, documentado).
+
+Desde ese estado limpio —original + tests + biblia, sin una línea del guarreto— **Lina planifica** y
+**empieza el Sprint**. Así el sprint construye *de cero pero con la diana ya puesta y el conocimiento
+ya escrito*: la exploración valió, el desorden no contamina.
+
+> **Mecánica de git (idea de Tie, a aterrizar — NO para ya):** trabajar el spike en una rama (p.ej.
+> `forge`), y al cerrar hacer **cherry-pick de los tests (Ana Liz) y la biblia (Anselmo)** a una rama
+> nueva limpia (p.ej. `sprint`), revirtiendo el resto. Posible refinamiento: que las ramas lleven el
+> **nombre del estado actual del ciclo**. Pendiente de aterrizar en una conversación propia.
+
 ### F21 — Miga de pan del ciclo + mando de transporte (4 acciones)
 En alguna parte visible se ve **todo el ciclo en una miga de pan** separada por ">", con la fase
 actual **iluminada**:

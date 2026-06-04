@@ -13,42 +13,47 @@
  * La paralelización real (partir el plan en varias subtareas) es otro sprint.
  *
  * La escalera de estados (de menos a más avanzado), con su icono:
- *     pendiente ▢ → cogida ⏳ → mergeada 🌳 → cerrada ✕
+ *     pendiente ▢ → cogida ⏳ → terminada 🌳 → en master ✓
  * y, FUERA de la escalera, error ✕ (rojo) = petó/revisar.
+ *
+ * Los peldaños se LEEN de las marcas que el motor escribe en la tarea:
+ *   - `builtAt`  → Ejecutar creó el worktree y Miguel está/estuvo construyendo;
+ *   - `brought`  → el build TERMINÓ y vive en el worktree (árbol aislado), pero
+ *                  todavía NO está en master → peldaño 'terminada' 🌳;
+ *   - `enMaster` → el delta del worktree YA se commiteó a master → 'enMaster' ✓
+ *                  (cierre feliz, verde);
+ *   - `error`    → petó / agotó reintentos → 'error' ✕ (rojo, fuera de la escalera).
  *
  * Reglas del padre:
  *   - la tarea asume el estado de su subtarea MENOS avanzada;
  *   - el ROJO siempre gana: si alguna subtarea petó, el padre es 'error'
  *     (un fallo nunca queda escondido tras un hermano terminado: se arregla antes
  *     que nada).
- *
- * Nota a saldar con Tie: por ahora `brought` mapea a 'mergeada' (el peldaño más
- * alto que el ciclo emite hoy). 'cerrada' queda definida en la escalera pero solo
- * se alcanza con una marca explícita `tarea.cerrada` —pendiente de confirmar si
- * "mergeada" y "cerrada" son dos peldaños o uno.
  */
 
 // La escalera. `rank` ordena de menos a más avanzado (para la regla del padre).
 // `grupo` es el cajón del panel derecho. `rojo` = error (siempre gana).
+// `verde` = cierre feliz (en master), para que el front lo pinte distinto.
 export const ESTADOS = {
   pendiente: { icon: '▢',  rank: 0, grupo: 'porhacer',   label: 'pendiente' },
   cogida:    { icon: '⏳', rank: 1, grupo: 'encurso',    label: 'cogida' },
-  mergeada:  { icon: '🌳', rank: 2, grupo: 'terminadas', label: 'mergeada' },
-  cerrada:   { icon: '✕',  rank: 3, grupo: 'terminadas', label: 'cerrada' },
+  terminada: { icon: '🌳', rank: 2, grupo: 'terminadas', label: 'terminada' },
+  enMaster:  { icon: '✓',  rank: 3, grupo: 'terminadas', label: 'en master', verde: true },
   error:     { icon: '✕',  rank: -1, grupo: 'revisar',   label: 'error', rojo: true },
 };
 
 export function iconOf(estado)  { return (ESTADOS[estado] || ESTADOS.pendiente).icon; }
 export function grupoOf(estado) { return (ESTADOS[estado] || ESTADOS.pendiente).grupo; }
 export function esRojo(estado)  { return !!(ESTADOS[estado] && ESTADOS[estado].rojo); }
+export function esVerde(estado) { return !!(ESTADOS[estado] && ESTADOS[estado].verde); }
 
 // El estado de la subtarea `main` leído de las marcas de la tarea. El orden de los
 // `if` ES la escalera: rojo primero, luego de más a menos avanzado.
 function mainEstado(tarea) {
-  if (tarea.error)    return 'error';
-  if (tarea.cerrada)  return 'cerrada';
-  if (tarea.brought)  return 'mergeada';
-  if (tarea.builtAt)  return 'cogida';
+  if (tarea.error)              return 'error';
+  if (tarea.enMaster)           return 'enMaster';
+  if (tarea.brought)            return 'terminada';
+  if (tarea.builtAt)            return 'cogida';
   return 'pendiente';
 }
 

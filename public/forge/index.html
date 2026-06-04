@@ -354,6 +354,7 @@
   .tarea-row { display: flex; align-items: center; gap: 8px; }
   .tarea-ico { flex: 0 0 auto; font-size: 14px; width: 18px; text-align: center; }
   .tarea-ico.rojo { color: #ff5470; }
+  .tarea-ico.verde { color: #2ecc71; }   /* ✓ en master = cierre feliz */
   .tarea-item .title { font-weight: 500; flex: 1 1 auto; min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* barrita clicable que despliega el contenedor de subtareas */
@@ -779,7 +780,7 @@
 
     // fila: icono de estado + título cortísimo (descripción en rollover).
     const row = document.createElement('div'); row.className = 'tarea-row';
-    const ico = document.createElement('span'); ico.className = 'tarea-ico' + (t.estado === 'error' ? ' rojo' : '');
+    const ico = document.createElement('span'); ico.className = 'tarea-ico' + (t.estado === 'error' ? ' rojo' : t.estado === 'enMaster' ? ' verde' : '');
     ico.textContent = t.icon;
     const title = document.createElement('div'); title.className = 'title'; title.textContent = t.title;
     row.append(ico, title);
@@ -793,7 +794,7 @@
     const bar = document.createElement('div'); bar.className = 'tarea-bar';
     const fill = document.createElement('div'); fill.className = 'fill';
     // la barrita rellena según el avance de la subtarea menos avanzada (0..1).
-    const RANK = { error: 0, pendiente: 0, cogida: 0.5, mergeada: 1, cerrada: 1 };
+    const RANK = { error: 0, pendiente: 0, cogida: 0.4, terminada: 0.75, enMaster: 1 };
     fill.style.width = Math.round((RANK[t.estado] ?? 0) * 100) + '%';
     bar.appendChild(fill);
     bar.title = abierto ? 'Plegar subtareas' : 'Desplegar subtareas';
@@ -808,7 +809,7 @@
     subsEl.className = 'tarea-subs' + (abierto ? '' : ' hidden');
     for (const s of subs) {
       const se = document.createElement('div'); se.className = 'tarea-sub';
-      const si = document.createElement('span'); si.className = 'tarea-ico' + (s.estado === 'error' ? ' rojo' : '');
+      const si = document.createElement('span'); si.className = 'tarea-ico' + (s.estado === 'error' ? ' rojo' : s.estado === 'enMaster' ? ' verde' : '');
       si.textContent = s.icon;
       const sn = document.createElement('span'); sn.className = 'sname'; sn.textContent = s.name;
       se.append(si, sn);
@@ -989,14 +990,16 @@
       // el informe de Miguel es de QUIEN construyó → de ahí cuelga "Traer el código".
       // Solo en mensajes de Miguel; habilitado si hay algo que traer, si no, gris.
       if (m.author === 'miguel' && currentTarea) {
-        const b = selActBtn('⬇ Traer el código', () => traerTarea(currentTarea.id), true);
-        b.disabled = true; b.title = 'Comprobando si hay código que traer…';
+        // El cierre es AUTOMÁTICO al terminar Miguel (auto-merge a master). Este botón
+        // es el reintento MANUAL (p.ej. si el auto-merge petó y quieres reintentar).
+        const b = selActBtn('⬇ Subir a master', () => traerTarea(currentTarea.id), true);
+        b.disabled = true; b.title = 'Comprobando…';
         selActs.appendChild(b);
-        // pregunta async si hay algo; habilita o deja gris ("ya traído"/"sin cambios").
+        // habilita el reintento salvo que ya esté en master (cierre feliz).
         fetch('/api/tareas/' + currentTarea.id + '/traible').then((r) => r.json()).then((s) => {
           b.disabled = !s.traible;
-          b.title = s.traible ? 'Aplica al árbol vivo lo que Miguel construyó'
-            : (s.reason === 'ya traído' ? 'Ya traído al árbol vivo' : 'No hay cambios que traer');
+          b.title = s.traible ? 'Trae todo el arbolito y lo sube a master (commit)'
+            : (s.reason === 'ya en master' ? 'Ya está en master ✓' : 'Nada que subir');
         }).catch(() => {});
       }
     } else {
@@ -1309,21 +1312,20 @@
     tareaDefEl.append(eye, h, body, acts);
   }
 
-  // Traer: aplica el código del worktree de Miguel al árbol vivo (merge a 3 vías).
-  // Si choca, el REVISOR lo resuelve y SIEMPRE completa el merge (reporta en el hilo).
+  // Subir a master: trae TODO el arbolito (commits de la rama + cambios sueltos) al
+  // árbol vivo y lo COMMITEA a master. Si choca, el revisor lo resuelve y reintenta
+  // (tope 3); si no entra, la tarea queda en error (✕). El cierre normal es
+  // AUTOMÁTICO al terminar Miguel; esto es el reintento manual.
   async function traerTarea(id) {
-    if (!confirm('¿Traer a tu árbol vivo el código que construyó Miguel?\n\nSe aplican sus cambios encima de lo que tienes ahora; si chocan, el revisor resuelve el merge.')) return;
+    if (!confirm('¿Subir a master el trabajo de esta tarea?\n\nSe trae todo el arbolito y se commitea a master. Si choca, el revisor resuelve el merge (reintenta hasta 3 veces).')) return;
     let j;
     try { j = await (await fetch('/api/tareas/' + id + '/traer', { method: 'POST' })).json(); }
-    catch { alert('No se pudo traer.'); return; }
-    if (j.applied) alert('✅ Código traído al árbol vivo.\nSi tocó el back, reinicia el forge; refresca para ver los cambios del front.');
-    else if (j.empty) alert('Miguel no dejó cambios en su worktree.');
+    catch { alert('No se pudo subir a master.'); return; }
+    if (j.applied && j.enMaster) alert('✅ En master.\nCommiteado. Si tocó el back, reinicia el forge; refresca para ver los cambios del front.');
+    else if (j.empty) alert('El build no dejó ningún cambio.');
     else if (j.incompatible) alert('⚠️ ' + (j.error || 'El build no encaja con tu árbol actual.') + '\n\n(Este build es viejo: vuelve a pulsar 🔨 Ejecutar.)');
-    else if (j.resolving) {
-      // el revisor está resolviendo en vivo: que se vea su mensaje aparecer en el hilo.
-      pending = true; pendingBaseline = otherCount; pendingAuthor = 'revisor'; pendingParent = null;
-      lastSig = ''; refreshThread();
-    } else alert('No se pudo traer: ' + (j.error || 'error'));
+    else alert('No entró en master: ' + (j.error || 'error') + '\n\nLa tarea queda en revisar (✕).');
+    lastSig = ''; refreshThread(); loadTareas();
   }
 
   // Ejecutar: lanza a Miguel a construir la tarea (worktree aislado). Reporta en el hilo.

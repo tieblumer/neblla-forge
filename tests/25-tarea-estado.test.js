@@ -18,17 +18,19 @@ export async function run({ reporter: r }) {
   // ── la escalera de iconos ──────────────────────────────────────────────────
   r.eq('▢ pendiente', iconOf('pendiente'), '▢');
   r.eq('⏳ cogida', iconOf('cogida'), '⏳');
-  r.eq('🌳 mergeada', iconOf('mergeada'), '🌳');
-  r.eq('✕ cerrada', iconOf('cerrada'), '✕');
+  r.eq('🌳 terminada (en el arbolito)', iconOf('terminada'), '🌳');
+  r.eq('✓ enMaster (cierre feliz)', iconOf('enMaster'), '✓');
   r.eq('✕ error', iconOf('error'), '✕');
-  r.ok('error es rojo, cerrada no', ESTADOS.error.rojo === true && !ESTADOS.cerrada.rojo);
+  r.ok('error es rojo, enMaster no', ESTADOS.error.rojo === true && !ESTADOS.enMaster.rojo);
+  r.ok('enMaster es verde, error no', ESTADOS.enMaster.verde === true && !ESTADOS.error.verde);
 
   // ── main sintética: el estado se LEE de las señales del ciclo ───────────────
   r.eq('sin marcas → main pendiente', subtareasDe({}).map((s) => s.estado).join(), 'pendiente');
   r.eq('builtAt → main cogida', subtareasDe({ builtAt: 'x' })[0].estado, 'cogida');
-  r.eq('brought → main mergeada', subtareasDe({ builtAt: 'x', brought: true })[0].estado, 'mergeada');
+  r.eq('brought → main terminada (arbolito)', subtareasDe({ builtAt: 'x', brought: true })[0].estado, 'terminada');
+  r.eq('enMaster → main enMaster', subtareasDe({ brought: true, enMaster: true })[0].estado, 'enMaster');
   r.eq('error gana sobre brought', subtareasDe({ brought: true, error: 'petó' })[0].estado, 'error');
-  r.eq('cerrada explícita', subtareasDe({ brought: true, cerrada: true })[0].estado, 'cerrada');
+  r.eq('error gana sobre enMaster', subtareasDe({ enMaster: true, error: 'petó' })[0].estado, 'error');
   r.eq('siempre hay al menos main', subtareasDe(null).length, 1);
   r.eq('la única se llama main', subtareasDe({})[0].name, 'main');
 
@@ -40,19 +42,20 @@ export async function run({ reporter: r }) {
   }
 
   // ── regla del padre: la subtarea MENOS avanzada ────────────────────────────
-  r.eq('padre = menos avanzada', estadoPadre([{ estado: 'mergeada' }, { estado: 'cogida' }]), 'cogida');
-  r.eq('todas terminadas → mergeada', estadoPadre([{ estado: 'mergeada' }, { estado: 'mergeada' }]), 'mergeada');
+  r.eq('padre = menos avanzada', estadoPadre([{ estado: 'enMaster' }, { estado: 'cogida' }]), 'cogida');
+  r.eq('terminada por debajo de enMaster', estadoPadre([{ estado: 'enMaster' }, { estado: 'terminada' }]), 'terminada');
+  r.eq('todas en master → enMaster', estadoPadre([{ estado: 'enMaster' }, { estado: 'enMaster' }]), 'enMaster');
   r.eq('lista vacía → pendiente', estadoPadre([]), 'pendiente');
 
   // ── el ROJO siempre gana (no se esconde tras un hermano terminado) ─────────
-  r.eq('rojo gana aunque otra esté mergeada',
-    estadoPadre([{ estado: 'mergeada' }, { estado: 'error' }]), 'error');
+  r.eq('rojo gana aunque otra esté en master',
+    estadoPadre([{ estado: 'enMaster' }, { estado: 'error' }]), 'error');
   r.eq('rojo gana aunque todas las demás terminen',
-    estadoPadre([{ estado: 'cerrada' }, { estado: 'error' }, { estado: 'mergeada' }]), 'error');
+    estadoPadre([{ estado: 'terminada' }, { estado: 'error' }, { estado: 'enMaster' }]), 'error');
 
   // ── divergencia → auto-despliegue ──────────────────────────────────────────
   r.ok('iconos iguales NO divergen', diverge([{ estado: 'cogida' }, { estado: 'cogida' }]) === false);
-  r.ok('iconos distintos divergen', diverge([{ estado: 'cogida' }, { estado: 'mergeada' }]) === true);
+  r.ok('iconos distintos divergen', diverge([{ estado: 'cogida' }, { estado: 'enMaster' }]) === true);
   r.ok('una sola subtarea no diverge', diverge([{ estado: 'cogida' }]) === false);
 
   // ── decorar: el objeto que viaja al front ──────────────────────────────────

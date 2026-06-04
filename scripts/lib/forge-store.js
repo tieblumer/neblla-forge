@@ -318,13 +318,19 @@ export function updateTareaDefinition(root, id, { title, body }) {
 
 // Guarda en la tarea el worktree donde Miguel construyó (al Ejecutar), para poder
 // TRAER ese código al árbol vivo después. Devuelve la tarea.
-export function setTareaBuild(root, id, { worktree, branch, repo } = {}) {
+export function setTareaBuild(root, id, { worktree, branch, repo, base } = {}) {
   const tarea = readTarea(root, id);
   if (!tarea) throw new Error('tarea no encontrada: ' + id);
   if (worktree !== undefined) tarea.worktree = worktree;
   if (branch !== undefined) tarea.branch = branch;
   if (repo !== undefined) tarea.buildRepo = repo;
+  if (base !== undefined) tarea.base = base;   // sha del que partió el worktree → delta completo al traer
   tarea.builtAt = new Date().toISOString();
+  // re-Ejecutar empieza de cero: el build anterior ya no vale, así que las marcas
+  // de avance posteriores (traído / en master) se borran para que el panel vuelva
+  // a ⏳ cogida y no quede un ✓ mentiroso de un build viejo.
+  delete tarea.brought; delete tarea.broughtAt;
+  delete tarea.enMaster; delete tarea.enMasterAt; delete tarea.masterCommit;
   return writeTarea(root, tarea);
 }
 
@@ -336,6 +342,22 @@ export function markTareaBrought(root, id) {
   tarea.brought = true;
   tarea.broughtAt = new Date().toISOString();
   delete tarea.error; delete tarea.erroredAt;   // traer OK borra cualquier petó previo
+  return writeTarea(root, tarea);
+}
+
+// Marca que el delta del worktree YA se commiteó a MASTER (icono ✓ verde =
+// cierre feliz). Implica que el build terminó (marca también `brought` si no
+// estaba) y borra cualquier petó previo. `commit` = sha del commit a master (para
+// trazabilidad). Idempotente; no lanza si la tarea no existe.
+export function markTareaEnMaster(root, id, commit) {
+  const tarea = readTarea(root, id);
+  if (!tarea) return null;
+  tarea.brought = true;
+  if (!tarea.broughtAt) tarea.broughtAt = new Date().toISOString();
+  tarea.enMaster = true;
+  tarea.enMasterAt = new Date().toISOString();
+  if (commit) tarea.masterCommit = String(commit);
+  delete tarea.error; delete tarea.erroredAt;   // entrar en master borra cualquier petó
   return writeTarea(root, tarea);
 }
 

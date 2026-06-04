@@ -27,10 +27,11 @@ import {
   listChats, createChat, readChat, appendMessage, chatsDir, deleteChat,
   replaceMessageText, collapseUpToFork, listTareas, createTarea, renameChat,
   readCycle, writeCycle, readTarea, ensureTareaThread, updateTareaDefinition,
-  setTareaBuild, markTareaBrought, setTareaError, clearTareaError, readModel, writeModel,
+  setTareaBuild, markTareaBrought, markTareaEnMaster, setTareaError, clearTareaError, readModel, writeModel,
 } from './lib/forge-store.js';
 import * as cycle from './lib/forge-firme.js';
 import { ordenar as ordenarTareas, GRUPOS as TAREA_GRUPOS } from './lib/forge-estado.js';
+import { createMergeEngine } from './lib/forge-merge.js';
 import {
   charlaPrompt, williamChallengePrompt, anselmoPrompt, aubePrompt,
   stevensPrompt, miyagiPrompt, discutirPrompt, miguelPrompt, mergeReviewerPrompt,
@@ -200,6 +201,7 @@ function launchHeadless({
   allowedTools = 'Read,Grep,Glob,mcp__forge__contestar',
   timeoutMs = HEADLESS_TIMEOUT_MS,
   liveMsgId = null,   // si viene: stream-json + resumen Haiku que REESCRIBE este mensaje cada 10s
+  onDone = null,      // si viene: callback({ failed, reported, code, signal }) al salir el headless
 }) {
   const cfg = {
     mcpServers: {
@@ -341,6 +343,13 @@ function launchHeadless({
       } catch (e) { console.error('[forge] no pude escribir el aviso de fallo:', e.message); }
     }
     try { fs.unlinkSync(cfgPath); } catch {}
+    // gancho de cierre: el endpoint que lanzó este headless puede enganchar aquí
+    // un paso AUTOMÁTICO (p.ej. el auto-merge a master cuando Miguel termina). Se
+    // llama SIEMPRE al salir, con el veredicto; el callback decide qué hacer con él.
+    if (typeof onDone === 'function') {
+      try { onDone({ failed, reported, code, signal }); }
+      catch (e) { console.error('[forge] onDone reventó:', e.message); }
+    }
   });
 }
 
@@ -892,8 +901,9 @@ app.post('/api/tareas/:id/ejecutar', (req, res) => {
     return res.status(500).json({ error: 'no pude crear el worktree: ' + ((r.stderr || '').trim() || (r.error && r.error.message) || 'git falló') });
   }
   console.log(`[forge] worktree de la tarea ${tarea.id} parte del estado vivo (base ${base === 'HEAD' ? 'HEAD' : base.slice(0, 8)}).`);
-  // recuerda el worktree en la tarea → luego el botón "Traer el código" lo aplica.
-  try { setTareaBuild(ROOT, tarea.id, { worktree: wtPath, branch, repo }); } catch {}
+  // recuerda el worktree Y LA BASE en la tarea → al traer, el delta completo del
+  // arbolito (commits + cambios sueltos) se calcula contra esta base.
+  try { setTareaBuild(ROOT, tarea.id, { worktree: wtPath, branch, repo, base }); } catch {}
   // re-Ejecutar empieza de cero: borra cualquier petó previo (icono ✕ rojo) y la
   // marca de "ya traída", para que el panel la pinte como ⏳ cogida otra vez.
   try { clearTareaError(ROOT, tarea.id); } catch {}
@@ -926,6 +936,15 @@ app.post('/api/tareas/:id/ejecutar', (req, res) => {
     // APPEND: el informe final de Miguel es un mensaje APARTE (cuelga del vivo), así
     // el resumen en vivo nunca lo pisa. El vivo se cierra "en pasado" al terminar.
     extraEnv: { FORGE_REPLY_TO: String(liveMsg.id), FORGE_MSG_TYPE: 'build', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'miguel' },
+    // AUTO-MERGE: cuando Miguel TERMINA de construir bien, el último diente gira
+    // solo — el forge trae todo el arbolito y lo sube a master sin que nadie pulse
+    // "Traer". Si Miguel petó, no se trae nada (no hay build que subir). Serializado
+    // por el mutex de merges; los conflictos van al revisor (reintento, tope 3).
+    onDone: ({ failed }) => {
+      if (failed) { console.log(`[forge] Miguel petó la tarea ${tarea.id}; no auto-merge.`); return; }
+      console.log(`[forge] Miguel terminó la tarea ${tarea.id} → auto-merge a master.`);
+      mergeTareaToMaster(tarea.id).catch((e) => console.error('[forge] auto-merge reventó:', e.message));
+    },
   });
   console.log(`[forge] Ejecutar tarea ${tarea.id} → Miguel en worktree ${wtPath} (rama ${branch}).`);
   res.status(202).json({ spawned: true, worktree: wtPath, branch, threadId: tarea.threadId, liveMsgId: liveMsg.id });
@@ -935,11 +954,12 @@ app.post('/api/tareas/:id/ejecutar', (req, res) => {
 // El front lo usa para enseñar/deshabilitar el botón "Traer el código".
 function buildStatus(tarea) {
   if (!tarea || !tarea.worktree || !fs.existsSync(tarea.worktree)) return { traible: false, reason: 'sin worktree' };
-  if (tarea.brought) return { traible: false, reason: 'ya traído' };
-  const q = spawnSync('git', ['-C', tarea.worktree, 'diff', '--quiet'], { encoding: 'utf8' });
-  // git diff --quiet: exit 0 = sin cambios, 1 = hay cambios.
-  if (q.status === 1) return { traible: true };
-  return { traible: false, reason: 'sin cambios' };
+  // ya en master = cierre feliz: no hay nada más que traer.
+  if (tarea.enMaster) return { traible: false, reason: 'ya en master' };
+  // si petó el auto-merge (error sin llegar a master), el botón SIGUE vivo para
+  // reintentar a mano. Solo bloqueamos cuando NO hay error y ya se trajo.
+  if (tarea.brought && !tarea.error) return { traible: false, reason: 'ya traído' };
+  return { traible: true };
 }
 
 app.get('/api/tareas/:id/traible', (req, res) => {
@@ -968,58 +988,70 @@ function snapshotLiveCommit(repo) {
   finally { try { fs.unlinkSync(tmpIndex); } catch {} }
 }
 
-// Ficheros con marcadores de conflicto tras `git apply --3way` (no van al índice,
-// así que los buscamos por el marcador en el árbol vivo).
-function listConflictFiles(repo) {
-  // marcadores REALES de git: van a COLUMNA 0 ('^<<<<<<< '). Anclar a inicio de
-  // línea evita matchear código que contenga la cadena (p.ej. esta misma función).
-  const r = spawnSync('git', ['-C', repo, 'grep', '-lE', '^<<<<<<< '], { encoding: 'utf8' });
-  if (r.status !== 0 || !r.stdout) return [];
-  return r.stdout.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 50);
+// ── el ÚLTIMO diente: traer-todo + commit a master (motor determinista) ──────
+// El cierre de una tarea ya no se queda en el arbolito: el delta COMPLETO del
+// worktree (commits de la rama + cambios sueltos) se aplica al árbol vivo del repo
+// objetivo y se COMMITEA a master. Conflicto → revisor → reintento (tope 3) →
+// si no entra, ERROR. Todo serializado por un mutex (forge.js es un proceso).
+// El motor PURO vive en scripts/lib/forge-merge.js (testable sin servidor); aquí
+// solo le inyectamos sus manos (git real, store real, revisor-Claude real).
+
+// El revisor real: lanza un headless que resuelve los marcadores y espera (promesa)
+// a que termine. El motor verifica DESPUÉS (grep de marcadores) si de verdad cerró.
+function spawnRealReviewer({ tarea, repo, ficheros }) {
+  return new Promise((resolve) => {
+    const repoDesc = repo === PROJECT_ROOT ? 'Neblla, el producto (project/)' : 'el forge (raíz del repo)';
+    let t2;
+    try { ensureTareaThread(ROOT, tarea.id); t2 = readTarea(ROOT, tarea.id); }
+    catch { resolve(false); return; }
+    let liveMsg;
+    try {
+      liveMsg = appendMessage(ROOT, t2.threadId, {
+        type: 'merge', author: 'revisor', intent: 'answer', replyTo: null,
+        text: '🔀 Hubo conflictos al subir a master. El revisor los está resolviendo…',
+      });
+    } catch { resolve(false); return; }
+    launchHeadless({
+      chatId: t2.threadId,
+      cwd: repo,
+      allowedTools: 'Read,Write,Edit,Bash,Grep,Glob,mcp__forge__contestar',
+      timeoutMs: 15 * 60 * 1000,
+      liveMsgId: liveMsg.id,
+      prompt: mergeReviewerPrompt({ definicion: `${t2.title}\n\n${t2.body || ''}`.trim(), repoDesc, ficheros }),
+      extraEnv: { FORGE_REPLY_TO: String(liveMsg.id), FORGE_MSG_TYPE: 'merge', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'revisor' },
+      onDone: () => resolve(true),
+    });
+  });
 }
 
-// TRAER el código: coge lo que Miguel dejó (sin comitear) en su worktree y lo
-// APLICA al árbol vivo con merge a 3 vías (`git apply --3way`). Si hay CONFLICTO,
-// no se rinde: lanza un REVISOR (Claude) que lo resuelve y SIEMPRE completa el merge.
-app.post('/api/tareas/:id/traer', (req, res) => {
+const { mergeTareaToMaster } = createMergeEngine({
+  spawnSync,
+  readTarea: (id) => readTarea(ROOT, id),
+  resolveRepo: (tarea) => (tarea.buildRepo && fs.existsSync(tarea.buildRepo) ? tarea.buildRepo : targetRoot()),
+  markBrought: (id) => { try { markTareaBrought(ROOT, id); } catch {} },
+  markEnMaster: (id, commit) => { try { markTareaEnMaster(ROOT, id, commit); } catch {} },
+  markError: (id, msg) => { try { setTareaError(ROOT, id, msg); } catch {} },
+  runReviewer: spawnRealReviewer,
+  log: (m) => console.log('[forge] ' + m),
+  errlog: (m) => console.error('[forge] ' + m),
+});
+
+// TRAER el código (botón MANUAL, y el mismo camino que dispara el auto-merge):
+// trae el delta COMPLETO del arbolito al árbol vivo y lo COMMITEA a master. Si hay
+// conflicto, el revisor lo resuelve y reintenta; si no entra tras 3, queda en error.
+app.post('/api/tareas/:id/traer', async (req, res) => {
   const tarea = readTarea(ROOT, req.params.id);
   if (!tarea) return res.status(404).json({ error: 'tarea no encontrada' });
   if (!tarea.worktree || !fs.existsSync(tarea.worktree)) {
     return res.status(400).json({ error: 'esta tarea no tiene worktree de Miguel (¿la ejecutaste?)' });
   }
-  const diff = spawnSync('git', ['-C', tarea.worktree, 'diff'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (diff.status !== 0) {
-    return res.status(500).json({ error: 'no pude leer el diff del worktree: ' + ((diff.stderr || '').trim() || 'git falló') });
-  }
-  if (!diff.stdout.trim()) {
-    return res.json({ applied: false, empty: true, message: 'Miguel no dejó cambios sin comitear en su worktree.' });
-  }
-  const patchPath = path.join(os.tmpdir(), `forge-traer-${process.pid}-${Date.now()}.patch`);
-  try { fs.writeFileSync(patchPath, diff.stdout); }
-  catch (e) { return res.status(500).json({ error: 'no pude escribir el parche: ' + e.message }); }
+  let result;
+  try { result = await mergeTareaToMaster(tarea.id); }
+  catch (e) { return res.status(500).json({ error: 'el merge a master reventó: ' + e.message }); }
 
-  const repo = tarea.buildRepo && fs.existsSync(tarea.buildRepo) ? tarea.buildRepo : targetRoot();
-  // 1º apply PLANO: como Miguel partió del estado vivo (snapshotLiveCommit), su
-  // parche encaja con el árbol tal cual → aplica sin tocar nada más. Si no encaja
-  // (base distinta, p.ej. builds viejos), caemos a --3way y, si choca, al revisor.
-  let ap = spawnSync('git', ['-C', repo, 'apply', patchPath], { encoding: 'utf8' });
-  if (ap.status !== 0) ap = spawnSync('git', ['-C', repo, 'apply', '--3way', patchPath], { encoding: 'utf8' });
-  try { fs.unlinkSync(patchPath); } catch {}
-
-  if (ap.status === 0) {
-    try { markTareaBrought(ROOT, tarea.id); } catch {}
-    console.log(`[forge] Traído el código de la tarea ${tarea.id} al árbol vivo (${repo}).`);
-    return res.json({ applied: true, repo });
-  }
-
-  // Tras fallar el apply, ¿dejó MARCADORES de conflicto de verdad? Si NO, es que el
-  // parche ni siquiera encajó parcialmente (base incompatible: build viejo sobre una
-  // base distinta de la que tienes). Lanzar al revisor sería mandarlo a no encontrar
-  // nada y reportar "listo" en falso. Mejor honesto: pide RE-EJECUTAR la tarea.
-  const ficheros = listConflictFiles(repo);
-  if (!ficheros.length) {
-    // petó al traer (base incompatible): marca la tarea en rojo → panel "revisar".
-    try { setTareaError(ROOT, tarea.id, 'el build no encaja con el árbol actual'); } catch {}
+  if (result.ok && result.enMaster) return res.json({ applied: true, enMaster: true, repo: result.repo, commit: result.commit });
+  if (result.ok && result.empty)   return res.json({ applied: false, empty: true, message: result.message });
+  if (result.incompatible) {
     return res.status(409).json({
       applied: false, incompatible: true,
       error: 'El código de Miguel no encaja con tu árbol actual (se construyó sobre una base '
@@ -1027,32 +1059,7 @@ app.post('/api/tareas/:id/traer', (req, res) => {
         + 'estado actual y luego Traer.',
     });
   }
-  const repoDesc = repo === PROJECT_ROOT ? 'Neblla, el producto (project/)' : 'el forge (raíz del repo)';
-  ensureTareaThread(ROOT, tarea.id);
-  const t2 = readTarea(ROOT, tarea.id);
-  let liveMsg;
-  try {
-    liveMsg = appendMessage(ROOT, t2.threadId, {
-      type: 'merge', author: 'revisor', intent: 'answer', replyTo: null,
-      text: '🔀 Hubo conflictos al traer. El revisor los está resolviendo…',
-    });
-  } catch (e) { return res.status(500).json({ error: 'conflicto, y no pude abrir el hilo del revisor: ' + e.message }); }
-
-  launchHeadless({
-    chatId: t2.threadId,
-    cwd: repo,
-    allowedTools: 'Read,Write,Edit,Bash,Grep,Glob,mcp__forge__contestar',
-    timeoutMs: 15 * 60 * 1000,
-    liveMsgId: liveMsg.id,
-    prompt: mergeReviewerPrompt({ definicion: `${t2.title}\n\n${t2.body || ''}`.trim(), repoDesc, ficheros }),
-    // APPEND: el informe final del revisor ("traje el código, resolví X") es un
-    // mensaje APARTE que cuelga del vivo. Es el mensaje de cierre que faltaba.
-    extraEnv: { FORGE_REPLY_TO: String(liveMsg.id), FORGE_MSG_TYPE: 'merge', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'revisor' },
-  });
-  // NO marcamos "traído" aquí: el revisor trabaja en async; solo es verdad cuando
-  // de verdad cierra el merge. (Antes mentía: marcaba brought aunque no aplicara.)
-  console.log(`[forge] Traer tarea ${tarea.id}: conflicto → revisor resolviendo en ${repo} (ficheros: ${ficheros.join(', ') || '?'}).`);
-  res.status(202).json({ applied: false, resolving: true, threadId: t2.threadId, files: ficheros });
+  return res.status(409).json({ applied: false, error: result.error || 'no se pudo subir a master' });
 });
 
 // ── nuevo ciclo ───────────────────────────────────────────────────────────────
