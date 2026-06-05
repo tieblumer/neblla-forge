@@ -39,6 +39,7 @@ import {
 } from './lib/forge-prompts.js';
 import { troceaTarea } from './lib/forge-trocear.js';
 import { resolveProjectRoot } from './lib/target.js';
+import { logTokenUsage, extractUsage, parseCliResult } from './lib/forge-token-log.js';
 
 const PROJECT_ROOT = resolveProjectRoot();
 
@@ -82,6 +83,11 @@ function currentModel() {
 function modelArgs() {
   const m = currentModel();
   return m ? ['--model', m] : [];
+}
+
+// Etiqueta legible del modelo global, para el log de tokens.
+function modelLabel() {
+  return currentModel() || '(por defecto del CLI)';
 }
 
 // ── el headless de charla (suscripción, SIN API key) ─────────────────────────
@@ -229,7 +235,9 @@ function launchHeadless({
     // servidor `contestar` conecta de forma fiable (sin contaminación ambiental).
     '--strict-mcp-config',
     // con resumen en vivo, pedimos el stream para leer lo que va diciendo Miguel.
-    ...(live ? ['--output-format', 'stream-json', '--verbose'] : []),
+    // sin resumen, pedimos el JSON final → trae `usage`/`total_cost_usd` (coste REAL
+    // que reporta el propio CLI) para el contador de tokens, sin estimar nada.
+    ...(live ? ['--output-format', 'stream-json', '--verbose'] : ['--output-format', 'json']),
   ];
 
   const who = extraEnv.FORGE_AUTHOR || 'headless';
@@ -244,10 +252,14 @@ function launchHeadless({
   console.log(`[forge] ${who} arranca (chat ${chatId}, cwd ${cwd}${live ? ', resumen en vivo' : ''}).`);
 
   let child;
+  // usageRaw: el objeto-resultado del CLI con `usage`/`total_cost_usd`. En vivo se
+  // captura del evento `result` del stream; sin vivo, parseando el JSON final.
+  let usageRaw = null;
+  let jsonOut = '';   // acumula el stdout en modo no-vivo (un único JSON al final)
   try {
-    // stdout: 'pipe' si hay resumen en vivo (para leer el stream); si no, 'inherit'.
-    // stderr: 'pipe' siempre, para GUARDAR el motivo de un fallo (antes se perdía).
-    child = spawn('claude', args, { cwd, stdio: ['inherit', live ? 'pipe' : 'inherit', 'pipe'] });
+    // stdout: 'pipe' SIEMPRE — en vivo para leer el stream y el `result`; sin vivo
+    // para capturar el JSON final con el coste. stderr: 'pipe' para guardar fallos.
+    child = spawn('claude', args, { cwd, stdio: ['inherit', 'pipe', 'pipe'] });
   } catch (e) {
     console.error('[forge] no pude lanzar el headless (`claude`):', e.message);
     try { fs.unlinkSync(cfgPath); } catch {}
@@ -260,6 +272,12 @@ function launchHeadless({
       process.stderr.write(s);
       stderrTail = (stderrTail + s).slice(-2000); // últimos ~2 KB, para el aviso
     });
+  }
+
+  // Sin resumen en vivo, el stdout es un único JSON (`--output-format json`): lo
+  // acumulamos para sacar el coste al cerrar. (En vivo lo lee el bloque de abajo.)
+  if (!live && child.stdout) {
+    child.stdout.on('data', (d) => { jsonOut += d.toString(); });
   }
 
   // ── resumen en vivo: acumula el stream y reescribe el MENSAJE VIVO (snapshot).
@@ -278,7 +296,12 @@ function launchHeadless({
       let nl;
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
-        const piece = readableFromStreamLine(line.trim());
+        const t = line.trim();
+        // el evento `result` del stream trae el usage/coste de toda la sesión.
+        if (t.startsWith('{') && t.includes('"result"')) {
+          try { const obj = JSON.parse(t); if (obj && obj.type === 'result') usageRaw = obj; } catch {}
+        }
+        const piece = readableFromStreamLine(t);
         if (piece) transcript = (transcript + '\n' + piece).slice(-12000);
       }
     });
@@ -287,7 +310,7 @@ function launchHeadless({
       const snap = transcript.trim();
       if (snap && snap !== lastSummarized) {
         lastSummarized = snap;
-        const sum = await runHaikuSummary(snap);
+        const sum = await runHaikuSummary(snap, { chatId, forWho: who });
         if (!finished && sum) {
           try { replaceMessageText(ROOT, chatId, liveMsgId, `🔨 ${liveLabel}… (resumen en vivo)\n\n${sum}`); }
           catch (e) { console.error('[forge] no pude reescribir el resumen en vivo:', e.message); }
@@ -315,6 +338,26 @@ function launchHeadless({
     // suyos por encima del que ya tenía (el vivo). Vale para todos los modos.
     const reported = countMine() > before;
     console.log(`[forge] ${who} salió (code=${code}, signal=${signal || '-'}, ${secs}s, reportó=${reported}).`);
+
+    // ── contador de tokens: una línea por personaje, con el coste REAL del CLI ──
+    if (!live) { usageRaw = parseCliResult(jsonOut, { stream: false }); }
+    const usage = extractUsage(usageRaw);
+    if (usage.costUsd != null) {
+      console.log(`[forge] ${who}: ${usage.costUsd} USD (in ${usage.inputTokens}, out ${usage.outputTokens}, cache-read ${usage.cacheReadTokens}).`);
+    }
+    logTokenUsage(ROOT, {
+      spawn: live ? 'launchHeadless (vivo)' : 'launchHeadless',
+      agente: who,
+      permisos: allowedTools,            // las herramientas que se le concedieron
+      modelo: modelLabel(),
+      chatId: String(chatId),
+      promptChars: prompt.length,
+      promptBytes: Buffer.byteLength(prompt, 'utf8'),
+      textoEntrada: prompt,
+      durationSecs: secs,
+      code, signal: signal || null, failed,
+      ...usage,
+    });
 
     if (live) {
       // cierra el mensaje VIVO: en pasado (lo que hizo) si fue bien; con el aviso si murió.
@@ -377,7 +420,8 @@ function generateTitle(chatId) {
 
     let child;
     try {
-      child = spawn('claude', ['-p', prompt, ...modelArgs(), '--mcp-config', cfgPath, '--strict-mcp-config'], {
+      // JSON final → trae el título en `.result` y el coste en `.usage`/`.total_cost_usd`.
+      child = spawn('claude', ['-p', prompt, ...modelArgs(), '--output-format', 'json', '--mcp-config', cfgPath, '--strict-mcp-config'], {
         cwd: FORGE_DIR, stdio: ['ignore', 'pipe', 'inherit'],
       });
     } catch { try { fs.unlinkSync(cfgPath); } catch {} resolve(null); return; }
@@ -389,8 +433,16 @@ function generateTitle(chatId) {
     child.on('exit', () => {
       clearTimeout(timer);
       try { fs.unlinkSync(cfgPath); } catch {}
-      // primera línea no vacía, sin comillas, recortada por seguridad.
-      const t = out.split('\n').map((s) => s.trim()).find(Boolean) || '';
+      const res = parseCliResult(out, { stream: false });
+      logTokenUsage(ROOT, {
+        spawn: 'generateTitle', agente: 'varita (autoname)', permisos: '(ninguna)',
+        modelo: modelLabel(), chatId: String(chatId),
+        promptChars: prompt.length, promptBytes: Buffer.byteLength(prompt, 'utf8'),
+        textoEntrada: prompt, ...extractUsage(res),
+      });
+      // el título viaja en `.result` del JSON; primera línea no vacía, sin comillas.
+      const raw = (res && typeof res.result === 'string') ? res.result : out;
+      const t = String(raw).split('\n').map((s) => s.trim()).find(Boolean) || '';
       const clean = t.replace(/^["'«»]+|["'«».]+$/g, '').trim().slice(0, 60);
       resolve(clean || null);
     });
@@ -400,7 +452,7 @@ function generateTitle(chatId) {
 // Resumen en vivo con el modelo MÁS BARATO (Haiku), pase lo que pase el selector
 // global. Lee el registro de la sesión de Miguel y devuelve un SNAPSHOT corto en
 // cristiano (no acumula: describe el estado actual). null si falla. Sin MCP.
-function runHaikuSummary(transcript) {
+function runHaikuSummary(transcript, meta = {}) {
   return new Promise((resolve) => {
     const prompt = [
       'Eres un narrador silencioso. Abajo está el registro EN BRUTO de la sesión de',
@@ -419,7 +471,8 @@ function runHaikuSummary(transcript) {
     catch { resolve(null); return; }
     let child;
     try {
-      child = spawn('claude', ['-p', prompt, '--model', 'haiku', '--mcp-config', cfgPath, '--strict-mcp-config'], {
+      // JSON final → el resumen en `.result`, el coste en `.usage`/`.total_cost_usd`.
+      child = spawn('claude', ['-p', prompt, '--model', 'haiku', '--output-format', 'json', '--mcp-config', cfgPath, '--strict-mcp-config'], {
         cwd: FORGE_DIR, stdio: ['ignore', 'pipe', 'ignore'],
       });
     } catch { try { fs.unlinkSync(cfgPath); } catch {} resolve(null); return; }
@@ -430,7 +483,18 @@ function runHaikuSummary(transcript) {
     child.on('exit', () => {
       clearTimeout(timer);
       try { fs.unlinkSync(cfgPath); } catch {}
-      resolve(out.trim() || null);
+      const res = parseCliResult(out, { stream: false });
+      // Suspecto #2: este resumen se relanza cada 10s durante TODA la build → su
+      // coste sumado es la fuga que más se acumula. Lo medimos aparte para verlo.
+      logTokenUsage(ROOT, {
+        spawn: 'runHaikuSummary (resumen en vivo)',
+        agente: 'resumen-vivo' + (meta.forWho ? ` (de ${meta.forWho})` : ''),
+        permisos: '(ninguna)', modelo: 'haiku', chatId: meta.chatId ? String(meta.chatId) : null,
+        promptChars: prompt.length, promptBytes: Buffer.byteLength(prompt, 'utf8'),
+        textoEntrada: prompt, ...extractUsage(res),
+      });
+      const summary = (res && typeof res.result === 'string') ? res.result : out;
+      resolve(String(summary).trim() || null);
     });
   });
 }

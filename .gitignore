@@ -11,6 +11,9 @@ sprint/chats/
 sprint/cycle.json
 # pantallazos pegados en el chat (working-tree only, como las conversaciones).
 pantallazos/
+# contador de tokens (scripts/forge-token-log.js): registro de gasto por spawn,
+# artefacto de runtime que se regenera solo. Nunca a git.
+sprint/token-log.jsonl
 
 # forge machinery transient artifacts — never committed.
 scripts/_work/
