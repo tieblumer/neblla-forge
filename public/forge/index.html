@@ -417,7 +417,11 @@
     <!-- CENTRO: el carril del viaje (Nuevo ciclo › fases … Cierre) -->
     <div class="bar-center">
       <div class="rail" id="rail">
-        <!-- puerta de ENTRADA: una parada con ajustes (NO un botón de acción) -->
+        <!-- únicos botones del carril: Retroceder / Avanzar (SOFT, no destruyen).
+             ◀ abre el carril; el orden del viaje es: ◀ ⚙ Nuevo ciclo › Spike › … › Cierre ▶ -->
+        <button class="tp-btn" id="btnBack" title="Retroceder a la fase anterior (corregir el rumbo)">◀</button>
+        <!-- puerta de ENTRADA: una parada con ajustes (NO un botón de acción).
+             Va ENTRE la flecha izquierda y Spike (primera parada del carril). -->
         <div class="gate" id="gateNew">
           <button class="gate-stop" id="gateNewBtn" title="Abrir los ajustes del ciclo nuevo">⚙ Nuevo ciclo</button>
           <div class="gate-pop" id="popNew">
@@ -435,8 +439,6 @@
           </div>
         </div>
         <span class="rail-sep">›</span>
-        <!-- únicos botones del carril: Retroceder / Avanzar (SOFT, no destruyen) -->
-        <button class="tp-btn" id="btnBack" title="Retroceder a la fase anterior (corregir el rumbo)">◀</button>
         <div class="breadcrumb" id="breadcrumb"></div>
         <button class="tp-btn" id="btnAdvance" title="Avanzar a la fase siguiente (comprueba que se puede y mueve)">▶</button>
         <!-- "Cierre" ya NO es una puerta de salida: es la última fase del recorrido
@@ -558,9 +560,12 @@
   const targetBranch = document.getElementById('targetBranch');
   // si la forja aún no expone /api/cycle, pintamos la miga de pan en gris y
   // dejamos el transporte inerte (no inventamos estado): fases canónicas de §2.
+  // Espejo de LINEAR_PHASES (forge-firme.js): Cierre es la última fase del recorrido,
+  // no una puerta de salida. Debe verse aun con el endpoint /api/cycle caído.
   const FALLBACK_PHASES = [
     { key: 'spike', label: 'Spike' }, { key: 'grooming', label: 'Grooming' },
     { key: 'sprint', label: 'Sprint' }, { key: 'qa', label: 'QA' },
+    { key: 'cierre', label: 'Cierre' },
   ];
   let cycle = null; // último estado del ciclo, o null si el endpoint no responde
 

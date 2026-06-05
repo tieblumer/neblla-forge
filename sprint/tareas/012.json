@@ -6,10 +6,12 @@
   "fromChat": "030",
   "createdAt": "2026-06-04T22:41:13.307Z",
   "threadId": "033",
-  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t012-1780612882514",
-  "branch": "miguel/tarea-012-1780612882514",
+  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t012-1780644488897",
+  "branch": "miguel/tarea-012-1780644488897",
   "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
-  "base": "a033587449e98e5e0fe9bd6dcf5998954eeeeb27",
-  "builtAt": "2026-06-04T22:41:22.927Z",
-  "editedAt": "2026-06-04T22:45:56.419Z"
+  "base": "473a1d2e98270c8d64974f22f4aa8f85b62f2f61",
+  "builtAt": "2026-06-05T07:28:09.342Z",
+  "editedAt": "2026-06-04T22:45:56.419Z",
+  "brought": true,
+  "broughtAt": "2026-06-05T07:30:37.690Z"
 }
