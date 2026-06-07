@@ -71,35 +71,13 @@
         "entonces": "Su fila .chat-item .title no contiene el contenedor de iconos (o está vacío) y el título se ve normal.",
         "id": "T-20-04",
         "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\nfunction bloque(src, ancla, len = 1800) { const i = src.indexOf(ancla); return i === -1 ? '' : src.slice(i, i + len); }\n// un chat sin tareas no debe pintar contenedor de iconos: el pintado va guardado por\n// un chequeo de \"hay tareas\" (length) antes de crear/insertar el contenedor.\n// Buscamos la zona donde se cruza por chat (tareasPorChat[...]) y comprobamos que\n// hay un guard de longitud cerca.\nconst idx = html.indexOf('tareasPorChat[');\nconst zona = idx === -1 ? html : html.slice(Math.max(0, idx - 200), idx + 1200);\nr.ok('[T-20-04] el cruce por chat existe', idx !== -1 || /tareasPorChat/.test(html));\nr.ok('[T-20-04] el pintado de iconos está guardado por un chequeo de longitud (sin tareas, sin iconos)',\n  /\\.length/.test(zona) && /(if|\\?|&&|continue|return)/.test(zona));"
-      },
-      {
-        "ref": "iconos-tarea-en-chats",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "Sin caché propia: una tarea que pierde su fromChat desaparece del cruce al refrescar",
-        "dado": "Un chat que mostraba 2 iconos y un siguiente /api/tareas en el que una de esas tareas ya no tiene ese fromChat (fue borrada/restaurada).",
-        "cuando": "loadTareas() vuelve a refrescar y re-pinta.",
-        "entonces": "La fila pasa a mostrar 1 icono, leyendo siempre la lista viva sin estado obsoleto.",
-        "id": "T-20-05",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\nfunction bloque(src, ancla, len = 2200) { const i = src.indexOf(ancla); return i === -1 ? '' : src.slice(i, i + len); }\nconst lt = bloque(html, 'async function loadTareas(');\n// sin caché propia: loadTareas RECONSTRUYE el índice en cada refresco (reasignación/reset),\n// no lo va acumulando — así una tarea que pierde su fromChat desaparece sola del cruce.\nr.ok('[T-20-05] loadTareas reconstruye el índice tareasPorChat en cada refresco',\n  /tareasPorChat\\s*=/.test(lt) || /tareasPorChat\\s*=\\s*\\{\\s*\\}/.test(html) || /tareasPorChat\\.clear\\(/.test(lt));\n// y dispara un re-pintado de la lista de chats tras refrescar las tareas\nr.ok('[T-20-05] loadTareas dispara el re-pintado de los iconos en la lista de chats',\n  /loadList\\(/.test(lt) || /pintarIconos|repintar|pintarChat|refreshChats|renderChat/i.test(lt));"
-      },
-      {
-        "ref": "general",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "El truncado del título sigue intacto con la fila de iconos",
-        "dado": "Un chat con título largo y con iconos de tareas en su fila.",
-        "cuando": "Se renderiza la fila .chat-item .title.",
-        "entonces": "El título sigue truncándose (no desborda ni empuja la fila) y los iconos conviven en su contenedor inline sin romper el layout.",
-        "id": "T-20-06",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\nfunction bloque(src, ancla, len = 240) { const i = src.indexOf(ancla); return i === -1 ? '' : src.slice(i, i + len); }\n// el truncado del título sigue intacto: .chat-item .title conserva overflow/ellipsis/nowrap\nconst titleCss = bloque(html, '.chat-item .title', 260);\nr.ok('[T-20-06] .chat-item .title sigue con overflow hidden', /overflow:\\s*hidden/.test(titleCss));\nr.ok('[T-20-06] .chat-item .title sigue con text-overflow: ellipsis', /text-overflow:\\s*ellipsis/.test(titleCss));\nr.ok('[T-20-06] .chat-item .title sigue con white-space: nowrap', /white-space:\\s*nowrap/.test(titleCss));\n// y se ha añadido CSS para la fila de iconos como contenedor inline (no en bloque,\n// para convivir con el título truncado sin romper el layout)\nr.ok('[T-20-06] hay CSS para el contenedor inline de iconos en la fila',\n  /inline-flex/.test(html) || /display:\\s*inline/.test(html));"
       }
     ],
     "aprobado": false,
     "aprobadoAt": null,
     "generado": true,
     "generadoAt": "2026-06-07T03:13:23.795Z",
-    "ultimaCorrida": "2026-06-07T12:21:44.595Z"
+    "ultimaCorrida": "2026-06-07T12:21:47.467Z"
   },
   "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t020-1780832601673",
   "branch": "miguel/tarea-020-1780832601673",
@@ -109,5 +87,8 @@
   "construido": true,
   "construidoAt": "2026-06-07T11:45:56.169Z",
   "brought": true,
-  "broughtAt": "2026-06-07T12:21:44.864Z"
+  "broughtAt": "2026-06-07T12:21:44.864Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-07T12:21:45.392Z",
+  "masterCommit": "c2344e65b4525a412d6be9baee9087da0cac1c15"
 }

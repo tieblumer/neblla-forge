@@ -1,0 +1,117 @@
+{
+  "id": "023",
+  "num": 23,
+  "title": "Un interruptor \"Arranque automático: on/off\" en la cabecera del forge. Con ON, la forja vigila la ventana de 5 horas de la suscripción (vía el /api/usage que ya existe) y, cuando se ha recuperado, lanza sola —de una en una— las tareas pendientes de construir (las que su paso recomendado es 'ejecutar'). Así aprovechamos el margen nocturno sin gastar de más y sin que la forja tenga que despertarse a sí misma: sigue viva, solo ociosa, y un ticker interno dispara cuando hay hueco.",
+  "body": "Complejidad: compleja\n\nPartes:\n• autopiloto — El cerebro del arranque automático, todo en el back. (1) Nueva lib PURA scripts/lib/forge-autostart.js, al estilo de forge-shutdown.js / forge-estado.js: persistencia del flag (leer/escribir sprint/auto-start.json con {on:bool}, default off, best-effort) + la función PURA decidir({on, phase, activeAgents, usagePrimary, pendientes}) → {accion:'lanzar'|'esperar'|'nada', tareaId?, proximaVentana?, estado, motivo}. Reglas, en orden: off → nada (estado 'off'); phase!=='running' (draining/down) → nada (respeta el apagado de F15); activeAgents>0 → nada (una a una: nunca se pisan ni se comen la ventana entre varias); pendientes vacío → nada (estado 'sin-pendientes'); usagePrimary.usedPercent >= TOPE (constante, p.ej. 80) → esperar con proximaVentana=usagePrimary.resetsAt (estado 'esperando'); si hay hueco y hay pendiente → lanzar la más antigua (estado 'lanzando'). Si usagePrimary es null/no disponible → esperar (no arriesga). (2) En scripts/forge.js: factorizar el cuerpo de POST /api/tareas/:id/ejecutar a una función reutilizable arrancarConstruccion(tareaId) y dejar el endpoint llamándola; un ticker setInterval (~60s) que en cada latido reúne {flagPersistido, statusFull().phase, activeCount(), (await fetchUsage()).primary, lista de tareas decoradas (ordenarTareas) cuyo next.key==='ejecutar', la más antigua por num}, llama a decidir(...), y si accion==='lanzar' invoca arrancarConstruccion(tareaId). Guardar el último veredicto del decidir en una var de módulo para que el GET lo exponga. (3) Dos endpoints: GET /api/forge/autostart (devuelve la forma fija del contrato, derivada del flag + el último veredicto) y POST /api/forge/autostart (persiste el flip y dispara un latido inmediato).  (ficheros: scripts/forge.js, scripts/lib/forge-autostart.js)\n• toggle-front — El interruptor y su lectura, todo en public/forge/index.html. Un toggle 'Arranque automático' en la cabecera, junto a la lucecita de estado de la forja (F15, #forgeStatus). Al cargar lee GET /api/forge/autostart para pintar el toggle en su posición real (on/off). Al pulsarlo hace POST /api/forge/autostart con {on}. Pinta una línea de hint según el estado que devuelve el back: 'off' (apagado), 'esperando' → 'esperando a que se recupere la ventana de 5h (se recupera ~HH:MM)' usando proximaVentana, 'lanzando' → 'construyendo las tareas pendientes…', 'sin-pendientes' → 'sin tareas pendientes que lanzar'. Sondea el estado junto al poll de estado de la forja que ya existe (pollForgeStatus / su setInterval), sin abrir una sonda nueva si puede colgarse de esa.  (ficheros: public/forge/index.html)\n\nContrato:\n• autopiloto ↔ toggle-front: GET /api/forge/autostart → 200 {on:bool, estado:'off'|'esperando'|'lanzando'|'sin-pendientes', proximaVentana:ISOString|null, pendientes:int} — el back lo expone SIEMPRE mientras viva el proceso (estado = el del último veredicto de decidir(); proximaVentana solo no-null cuando estado==='esperando'); el front lo sondea para pintar el toggle (on) y la línea de hint (estado + proximaVentana + pendientes). Forma fija.\n• autopiloto ↔ toggle-front: POST /api/forge/autostart {on:bool} → 200 {ok:true, on:bool} — persiste el flip a disco (sprint/auto-start.json) y devuelve el valor ya guardado; idempotente (poner on=true dos veces no cambia nada); lo dispara el interruptor del front. El back puede correr un latido del ticker inmediatamente tras el flip, pero la respuesta HTTP no depende de ese latido.",
+  "fromChat": "036",
+  "fromMsg": 4,
+  "createdAt": "2026-06-07T17:03:25.784Z",
+  "plan": {
+    "version": 1,
+    "resumen": "Un interruptor \"Arranque automático: on/off\" en la cabecera del forge. Con ON, la forja vigila la ventana de 5 horas de la suscripción (vía el /api/usage que ya existe) y, cuando se ha recuperado, lanza sola —de una en una— las tareas pendientes de construir (las que su paso recomendado es 'ejecutar'). Así aprovechamos el margen nocturno sin gastar de más y sin que la forja tenga que despertarse a sí misma: sigue viva, solo ociosa, y un ticker interno dispara cuando hay hueco.",
+    "complejidad": "compleja",
+    "partes": [
+      {
+        "name": "autopiloto",
+        "hace": "El cerebro del arranque automático, todo en el back. (1) Nueva lib PURA scripts/lib/forge-autostart.js, al estilo de forge-shutdown.js / forge-estado.js: persistencia del flag (leer/escribir sprint/auto-start.json con {on:bool}, default off, best-effort) + la función PURA decidir({on, phase, activeAgents, usagePrimary, pendientes}) → {accion:'lanzar'|'esperar'|'nada', tareaId?, proximaVentana?, estado, motivo}. Reglas, en orden: off → nada (estado 'off'); phase!=='running' (draining/down) → nada (respeta el apagado de F15); activeAgents>0 → nada (una a una: nunca se pisan ni se comen la ventana entre varias); pendientes vacío → nada (estado 'sin-pendientes'); usagePrimary.usedPercent >= TOPE (constante, p.ej. 80) → esperar con proximaVentana=usagePrimary.resetsAt (estado 'esperando'); si hay hueco y hay pendiente → lanzar la más antigua (estado 'lanzando'). Si usagePrimary es null/no disponible → esperar (no arriesga). (2) En scripts/forge.js: factorizar el cuerpo de POST /api/tareas/:id/ejecutar a una función reutilizable arrancarConstruccion(tareaId) y dejar el endpoint llamándola; un ticker setInterval (~60s) que en cada latido reúne {flagPersistido, statusFull().phase, activeCount(), (await fetchUsage()).primary, lista de tareas decoradas (ordenarTareas) cuyo next.key==='ejecutar', la más antigua por num}, llama a decidir(...), y si accion==='lanzar' invoca arrancarConstruccion(tareaId). Guardar el último veredicto del decidir en una var de módulo para que el GET lo exponga. (3) Dos endpoints: GET /api/forge/autostart (devuelve la forma fija del contrato, derivada del flag + el último veredicto) y POST /api/forge/autostart (persiste el flip y dispara un latido inmediato).",
+        "ficheros": [
+          "scripts/forge.js",
+          "scripts/lib/forge-autostart.js"
+        ]
+      },
+      {
+        "name": "toggle-front",
+        "hace": "El interruptor y su lectura, todo en public/forge/index.html. Un toggle 'Arranque automático' en la cabecera, junto a la lucecita de estado de la forja (F15, #forgeStatus). Al cargar lee GET /api/forge/autostart para pintar el toggle en su posición real (on/off). Al pulsarlo hace POST /api/forge/autostart con {on}. Pinta una línea de hint según el estado que devuelve el back: 'off' (apagado), 'esperando' → 'esperando a que se recupere la ventana de 5h (se recupera ~HH:MM)' usando proximaVentana, 'lanzando' → 'construyendo las tareas pendientes…', 'sin-pendientes' → 'sin tareas pendientes que lanzar'. Sondea el estado junto al poll de estado de la forja que ya existe (pollForgeStatus / su setInterval), sin abrir una sonda nueva si puede colgarse de esa.",
+        "ficheros": [
+          "public/forge/index.html"
+        ]
+      }
+    ],
+    "contrato": [
+      {
+        "entre": [
+          "autopiloto",
+          "toggle-front"
+        ],
+        "interfaz": "GET /api/forge/autostart → 200 {on:bool, estado:'off'|'esperando'|'lanzando'|'sin-pendientes', proximaVentana:ISOString|null, pendientes:int}",
+        "acuerdo": "el back lo expone SIEMPRE mientras viva el proceso (estado = el del último veredicto de decidir(); proximaVentana solo no-null cuando estado==='esperando'); el front lo sondea para pintar el toggle (on) y la línea de hint (estado + proximaVentana + pendientes). Forma fija."
+      },
+      {
+        "entre": [
+          "autopiloto",
+          "toggle-front"
+        ],
+        "interfaz": "POST /api/forge/autostart {on:bool} → 200 {ok:true, on:bool}",
+        "acuerdo": "persiste el flip a disco (sprint/auto-start.json) y devuelve el valor ya guardado; idempotente (poner on=true dos veces no cambia nada); lo dispara el interruptor del front. El back puede correr un latido del ticker inmediatamente tras el flip, pero la respuesta HTTP no depende de ese latido."
+      }
+    ],
+    "aprobado": true,
+    "aprobadoAt": "2026-06-07T17:03:36.309Z"
+  },
+  "subtareas": [
+    {
+      "name": "autopiloto",
+      "alcance": {
+        "archivos": [
+          "scripts/forge.js",
+          "scripts/lib/forge-autostart.js"
+        ],
+        "frontera": "El cerebro del arranque automático, todo en el back. (1) Nueva lib PURA scripts/lib/forge-autostart.js, al estilo de forge-shutdown.js / forge-estado.js: persistencia del flag (leer/escribir sprint/auto-start.json con {on:bool}, default off, best-effort) + la función PURA decidir({on, phase, activeAgents, usagePrimary, pendientes}) → {accion:'lanzar'|'esperar'|'nada', tareaId?, proximaVentana?, estado, motivo}. Reglas, en orden: off → nada (estado 'off'); phase!=='running' (draining/down) → nada (respeta el apagado de F15); activeAgents>0 → nada (una a una: nunca se pisan ni se comen la ventana entre varias); pendientes vacío → nada (estado 'sin-pendientes'); usagePrimary.usedPercent >= TOPE (constante, p.ej. 80) → esperar con proximaVentana=usagePrimary.resetsAt (estado 'esperando'); si hay hueco y hay pendiente → lanzar la más antigua (estado 'lanzando'). Si usagePrimary es null/no disponible → esperar (no arriesga). (2) En scripts/forge.js: factorizar el cuerpo de POST /api/tareas/:id/ejecutar a una función reutilizable arrancarConstruccion(tareaId) y dejar el endpoint llamándola; un ticker setInterval (~60s) que en cada latido reúne {flagPersistido, statusFull().phase, activeCount(), (await fetchUsage()).primary, lista de tareas decoradas (ordenarTareas) cuyo next.key==='ejecutar', la más antigua por num}, llama a decidir(...), y si accion==='lanzar' invoca arrancarConstruccion(tareaId). Guardar el último veredicto del decidir en una var de módulo para que el GET lo exponga. (3) Dos endpoints: GET /api/forge/autostart (devuelve la forma fija del contrato, derivada del flag + el último veredicto) y POST /api/forge/autostart (persiste el flip y dispara un latido inmediato).",
+        "noTocar": [
+          "public/forge/index.html"
+        ]
+      },
+      "contrato": [
+        {
+          "entre": [
+            "autopiloto",
+            "toggle-front"
+          ],
+          "interfaz": "GET /api/forge/autostart → 200 {on:bool, estado:'off'|'esperando'|'lanzando'|'sin-pendientes', proximaVentana:ISOString|null, pendientes:int}",
+          "acuerdo": "el back lo expone SIEMPRE mientras viva el proceso (estado = el del último veredicto de decidir(); proximaVentana solo no-null cuando estado==='esperando'); el front lo sondea para pintar el toggle (on) y la línea de hint (estado + proximaVentana + pendientes). Forma fija."
+        },
+        {
+          "entre": [
+            "autopiloto",
+            "toggle-front"
+          ],
+          "interfaz": "POST /api/forge/autostart {on:bool} → 200 {ok:true, on:bool}",
+          "acuerdo": "persiste el flip a disco (sprint/auto-start.json) y devuelve el valor ya guardado; idempotente (poner on=true dos veces no cambia nada); lo dispara el interruptor del front. El back puede correr un latido del ticker inmediatamente tras el flip, pero la respuesta HTTP no depende de ese latido."
+        }
+      ]
+    },
+    {
+      "name": "toggle-front",
+      "alcance": {
+        "archivos": [
+          "public/forge/index.html"
+        ],
+        "frontera": "El interruptor y su lectura, todo en public/forge/index.html. Un toggle 'Arranque automático' en la cabecera, junto a la lucecita de estado de la forja (F15, #forgeStatus). Al cargar lee GET /api/forge/autostart para pintar el toggle en su posición real (on/off). Al pulsarlo hace POST /api/forge/autostart con {on}. Pinta una línea de hint según el estado que devuelve el back: 'off' (apagado), 'esperando' → 'esperando a que se recupere la ventana de 5h (se recupera ~HH:MM)' usando proximaVentana, 'lanzando' → 'construyendo las tareas pendientes…', 'sin-pendientes' → 'sin tareas pendientes que lanzar'. Sondea el estado junto al poll de estado de la forja que ya existe (pollForgeStatus / su setInterval), sin abrir una sonda nueva si puede colgarse de esa.",
+        "noTocar": [
+          "scripts/forge.js",
+          "scripts/lib/forge-autostart.js"
+        ]
+      },
+      "contrato": [
+        {
+          "entre": [
+            "autopiloto",
+            "toggle-front"
+          ],
+          "interfaz": "GET /api/forge/autostart → 200 {on:bool, estado:'off'|'esperando'|'lanzando'|'sin-pendientes', proximaVentana:ISOString|null, pendientes:int}",
+          "acuerdo": "el back lo expone SIEMPRE mientras viva el proceso (estado = el del último veredicto de decidir(); proximaVentana solo no-null cuando estado==='esperando'); el front lo sondea para pintar el toggle (on) y la línea de hint (estado + proximaVentana + pendientes). Forma fija."
+        },
+        {
+          "entre": [
+            "autopiloto",
+            "toggle-front"
+          ],
+          "interfaz": "POST /api/forge/autostart {on:bool} → 200 {ok:true, on:bool}",
+          "acuerdo": "persiste el flip a disco (sprint/auto-start.json) y devuelve el valor ya guardado; idempotente (poner on=true dos veces no cambia nada); lo dispara el interruptor del front. El back puede correr un latido del ticker inmediatamente tras el flip, pero la respuesta HTTP no depende de ese latido."
+        }
+      ]
+    }
+  ],
+  "paralelizadoAt": "2026-06-07T17:03:25.787Z",
+  "threadId": "051"
+}

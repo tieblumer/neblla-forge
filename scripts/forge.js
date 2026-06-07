@@ -1352,14 +1352,18 @@ app.post('/api/chats/:id/challenge', (req, res) => {
     focoText += '\n\nOJO: ese mensaje es TUYO — cuestiónate a ti mismo en primera persona.';
   }
 
+  // Si Tie escribió algo, se publica como su mensaje colgando del objetivo y la
+  // réplica de William cuelga de ÉL (no del rey original).
+  const susurro = publicarSusurroDeTie(id, req.body && req.body.steer, targetId);
+  const parentId = susurro ? susurro.id : targetId;
   launchHeadless({
     chatId: id,
-    prompt: williamChallengePrompt({ threadText: buildThreadText(id), focoText, steer: req.body && req.body.steer, voz: vozDe('william'), puedeLeer: puedeLeerCodigo('william') }),
-    extraEnv: { FORGE_REPLY_TO: String(targetId), FORGE_MSG_TYPE: 'challenge', FORGE_INTENT: 'challenge', FORGE_AUTHOR: 'william' },
+    prompt: williamChallengePrompt({ threadText: buildThreadText(id), focoText, voz: vozDe('william'), puedeLeer: puedeLeerCodigo('william') }),
+    extraEnv: { FORGE_REPLY_TO: String(parentId), FORGE_MSG_TYPE: 'challenge', FORGE_INTENT: 'challenge', FORGE_AUTHOR: 'william' },
   });
-  // pendingParent = el challenge de William cuelga del mensaje objetivo: el
-  // navegador pone ahí el fantasma, en su sitio exacto del árbol.
-  res.status(202).json({ spawned: true, targetId, pendingParent: targetId, scope });
+  // pendingParent = el challenge de William cuelga del padre (el texto de Tie si
+  // lo hubo, si no el mensaje objetivo): el navegador pone ahí el fantasma.
+  res.status(202).json({ spawned: true, targetId, pendingParent: parentId, scope });
 });
 
 // ── acciones de Spike con scope (Stevens / Miyagi / Romina&Ariel) ────────────
@@ -1376,6 +1380,22 @@ function resolveTargetAndScope(req, chat) {
   }
   const scope = ACTION_SCOPES.includes(req.body && req.body.scope) ? req.body.scope : 'mensaje';
   return { target, targetId, scope };
+}
+
+// Lo que Tie escribe al pulsar una acción (Discutir/Investigar/Consejo/Challenge/
+// Anselmo) NO es un susurro silencioso: se PUBLICA como su mensaje en el hilo,
+// colgando del target (replyTo = parentId; null = raíz de la def de la tarea),
+// igual que ya hace /aube. Devuelve el mensaje nuevo (con su id) o null si no
+// había texto. Quien llama usa ese id como nuevo padre para FORGE_REPLY_TO y el
+// pendingParent, de modo que el fantasma y la réplica aterrizan bajo el texto de
+// Tie → cadena rey → texto-de-Tie → respuesta. Como el texto ya vive en el hilo
+// (buildThreadText lo recoge), esos endpoints dejan de inyectar `steer` al prompt.
+function publicarSusurroDeTie(id, said, parentId) {
+  const text = String(said == null ? '' : said).trim();
+  if (!text) return null;
+  try {
+    return appendMessage(ROOT, id, { author: 'tie', intent: 'request', text, replyTo: parentId == null ? null : parentId });
+  } catch { return null; }
 }
 
 // DEBUG: devuelve el texto que se ENSAMBLA para un alcance dado, SIN lanzar a nadie.
@@ -1404,12 +1424,14 @@ app.post('/api/chats/:id/investigar', (req, res) => {
   if (!chat) return res.status(404).json({ error: 'conversación no encontrada' });
   const r = resolveTargetAndScope(req, chat);
   if (r.error) return res.status(400).json({ error: r.error });
+  const susurro = publicarSusurroDeTie(id, req.body && req.body.steer, r.targetId);
+  const parentId = susurro ? susurro.id : r.targetId;
   launchHeadless({
     chatId: id,
-    prompt: stevensPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, r.target, r.scope), steer: req.body && req.body.steer, target: targetDesc(), voz: vozDe('stevens'), puedeLeer: puedeLeerCodigo('stevens') }),
-    extraEnv: { FORGE_REPLY_TO: r.targetId == null ? '' : String(r.targetId), FORGE_MSG_TYPE: 'investigacion', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'stevens' },
+    prompt: stevensPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, r.target, r.scope), target: targetDesc(), voz: vozDe('stevens'), puedeLeer: puedeLeerCodigo('stevens') }),
+    extraEnv: { FORGE_REPLY_TO: parentId == null ? '' : String(parentId), FORGE_MSG_TYPE: 'investigacion', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'stevens' },
   });
-  res.status(202).json({ spawned: true, targetId: r.targetId, pendingParent: r.targetId, scope: r.scope });
+  res.status(202).json({ spawned: true, targetId: r.targetId, pendingParent: parentId, scope: r.scope });
 });
 
 // Mr. Miyagi: opinión honesta sobre qué buscamos (Consejo).
@@ -1419,12 +1441,14 @@ app.post('/api/chats/:id/consejo', (req, res) => {
   if (!chat) return res.status(404).json({ error: 'conversación no encontrada' });
   const r = resolveTargetAndScope(req, chat);
   if (r.error) return res.status(400).json({ error: r.error });
+  const susurro = publicarSusurroDeTie(id, req.body && req.body.steer, r.targetId);
+  const parentId = susurro ? susurro.id : r.targetId;
   launchHeadless({
     chatId: id,
-    prompt: miyagiPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, r.target, r.scope), steer: req.body && req.body.steer, target: targetDesc(), voz: vozDe('miyagi'), puedeLeer: puedeLeerCodigo('miyagi') }),
-    extraEnv: { FORGE_REPLY_TO: r.targetId == null ? '' : String(r.targetId), FORGE_MSG_TYPE: 'consejo', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'miyagi' },
+    prompt: miyagiPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, r.target, r.scope), target: targetDesc(), voz: vozDe('miyagi'), puedeLeer: puedeLeerCodigo('miyagi') }),
+    extraEnv: { FORGE_REPLY_TO: parentId == null ? '' : String(parentId), FORGE_MSG_TYPE: 'consejo', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'miyagi' },
   });
-  res.status(202).json({ spawned: true, targetId: r.targetId, pendingParent: r.targetId, scope: r.scope });
+  res.status(202).json({ spawned: true, targetId: r.targetId, pendingParent: parentId, scope: r.scope });
 });
 
 // Romina y Ariel: el dúo que discute, turno a turno (Discutir). UN solo mensaje:
@@ -1442,20 +1466,22 @@ app.post('/api/chats/:id/discutir', (req, res) => {
   const author = (req.body && req.body.author) === 'ariel' ? 'ariel' : 'romina';
   const genero = author === 'ariel' ? 'el' : 'ella';
   const stance = (req.body && req.body.stance) === 'rechaza' ? 'rechaza' : 'defiende';
+  const susurro = publicarSusurroDeTie(id, req.body && req.body.steer, r.targetId);
+  const parentId = susurro ? susurro.id : r.targetId;
   launchHeadless({
     chatId: id,
     prompt: discutirPrompt({
       threadText: buildThreadText(id),
       focoText: buildFocoText(chat, r.target, r.scope),
-      stance, steer: req.body && req.body.steer, voz: vozDe(author), genero,
+      stance, voz: vozDe(author), genero,
       puedeLeer: puedeLeerCodigo(author),
     }),
     extraEnv: {
-      FORGE_REPLY_TO: r.targetId == null ? '' : String(r.targetId), FORGE_MSG_TYPE: 'discusion',
+      FORGE_REPLY_TO: parentId == null ? '' : String(parentId), FORGE_MSG_TYPE: 'discusion',
       FORGE_INTENT: 'challenge', FORGE_AUTHOR: author, FORGE_STANCE: stance,
     },
   });
-  res.status(202).json({ spawned: true, targetId: r.targetId, pendingParent: r.targetId, scope: r.scope, author, stance });
+  res.status(202).json({ spawned: true, targetId: r.targetId, pendingParent: parentId, scope: r.scope, author, stance });
 });
 
 // Resumen A DEMANDA del build en vivo: Tie pulsa "📸 Resumir" en el mensaje de
@@ -1488,12 +1514,16 @@ app.post('/api/chats/:id/anselmo', (req, res) => {
   }
   if (parent == null && msgs.length) parent = msgs[msgs.length - 1].id;
 
+  // Si Tie escribió, su mensaje cuelga del parent calculado y la nota de Anselmo
+  // pasa a colgar de él.
+  const susurro = publicarSusurroDeTie(id, req.body && req.body.steer, parent);
+  const parentId = susurro ? susurro.id : parent;
   launchHeadless({
     chatId: id,
-    prompt: anselmoPrompt({ threadText: buildThreadText(id), steer: req.body && req.body.steer, voz: vozDe('anselmo') }),
-    extraEnv: { FORGE_REPLY_TO: parent == null ? '' : String(parent), FORGE_MSG_TYPE: 'resumen', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'anselmo' },
+    prompt: anselmoPrompt({ threadText: buildThreadText(id), voz: vozDe('anselmo') }),
+    extraEnv: { FORGE_REPLY_TO: parentId == null ? '' : String(parentId), FORGE_MSG_TYPE: 'resumen', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'anselmo' },
   });
-  res.status(202).json({ spawned: true, pendingParent: parent });
+  res.status(202).json({ spawned: true, pendingParent: parentId });
 });
 
 // Compactar: colapsa la cadena que la nota de Anselmo resume, hasta la

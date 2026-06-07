@@ -2145,9 +2145,11 @@
 
   // ── acciones de agente sobre (target, scope) ────────────────────────────────
   // Convención común del contrato: body { scope, targetId, steer } → 202 { pendingParent }.
-  // `steer` (opción C) = lo que tengas escrito en la caja: un SUSURRO al agente
-  // que NO se publica en el chat; el personaje decide si lo menciona o no. Se
-  // consume (se vacía la caja) al enviarse.
+  // `steer` = lo que tengas escrito en la caja. El servidor lo PUBLICA como un
+  // mensaje de Tie colgando del rey (ya no se pierde como susurro silencioso) y
+  // devuelve en `pendingParent` el id de ESE mensaje, para que el fantasma y la
+  // réplica del agente aterricen bajo él (cadena rey → texto-de-Tie → respuesta).
+  // Se consume (se vacía la caja) al enviarse.
   async function spikeAction(path, author) {
     if (!active) return;
     const targetId = actionTarget();
