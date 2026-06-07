@@ -889,6 +889,14 @@
   let currentTarea = null;   // F9b: la tarea abierta en el centro (su definición fija), o null
   let editingTareaDef = false; // true mientras se edita la definición a mano (no la pises con el sondeo)
   const threadEl = document.getElementById('thread');
+  // Click en el fondo vacío del hilo (no en una .bubble/.node) = salir del sub-hilo
+  // y volver al hilo principal (el primer mensaje). Las burbujas/nodos tienen su
+  // propio onclick con stopPropagation, así que este handler solo dispara en vacío.
+  threadEl.addEventListener('click', (e) => {
+    if (e.target.closest('.bubble') || e.target.closest('.node')) return;
+    const first = firstMsgId();
+    if (first != null && first !== selectedId) selectMsg(first);
+  });
   const titleEl = document.getElementById('chatTitle');
   const btnWand = document.getElementById('btnWand');
   const inputEl = document.getElementById('input');
@@ -1829,8 +1837,29 @@
     return (lastChat.messages || []).find((m) => m.id === id) || null;
   }
 
+  // Devuelve el id del PRIMER mensaje raíz real (en orden cronológico) = el hilo
+  // principal. Raíz = mensaje real sin replyTo, o cuyo padre ya no está presente.
+  function firstMsgId() {
+    if (!lastChat) return null;
+    const real = (lastChat.messages || []).filter((m) => !m.collapsed);
+    if (!real.length) return null;
+    const present = new Set(real.map((m) => m.id));
+    const roots = real.filter((m) => m.replyTo == null || !present.has(m.replyTo));
+    const first = (roots.length ? roots : real)[0];
+    return first ? first.id : null;
+  }
+
   function selectMsg(id) {
-    if (selectedId === id) return; // siempre hay un rey: no se deselecciona
+    if (selectedId === id) {
+      // Re-clic sobre el rey actual: "salimos" del sub-hilo y volvemos al hilo
+      // principal. Si el rey YA es el primero, no hay nada que hacer.
+      const first = firstMsgId();
+      if (first != null && first !== id) {
+        selectedId = first;
+        if (lastChat) renderThread(lastChat); else updateSelectionUI();
+      }
+      return; // siempre hay un rey: no se deselecciona
+    }
     selectedId = id;
     if (lastChat) renderThread(lastChat); else updateSelectionUI();
   }

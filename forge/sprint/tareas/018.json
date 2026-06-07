@@ -129,46 +129,13 @@
         "entonces": "removed = [1]; H1 y H2 quedan con replyTo = null (nuevas raíces) y figuran en reparented; el hilo sobrevive sin R",
         "id": "T-18-03",
         "codigo": "const fs = await import('fs'); const os = await import('os'); const path = await import('path');\nconst { createChat, appendMessage, readChat, deleteMessage } = await import('../../scripts/lib/forge-store.js');\nconst root = fs.mkdtempSync(path.join(os.tmpdir(), 'nbla-del-03-'));\nconst chat = createChat(root, { type: 'tarea', title: 'T' });\nconst R = appendMessage(root, chat.id, { author: 'tie', text: 'R', replyTo: null });  // id 1, raíz\nconst H1 = appendMessage(root, chat.id, { author: 'tie', text: 'H1', replyTo: R.id }); // id 2\nconst H2 = appendMessage(root, chat.id, { author: 'tie', text: 'H2', replyTo: R.id }); // id 3\nconst res = deleteMessage(root, chat.id, R.id, { cascade: false });\nr.eq('[T-18-03] removed = [R]', JSON.stringify([...res.removed]), JSON.stringify([R.id]));\nconst fresh = readChat(root, chat.id);\nconst h1 = fresh.messages.find((m) => m.id === H1.id);\nconst h2 = fresh.messages.find((m) => m.id === H2.id);\nr.ok('[T-18-03] borrar la raíz sin cascada deja H1 como nueva raíz (replyTo null)', !!h1 && h1.replyTo === null);\nr.ok('[T-18-03] borrar la raíz sin cascada deja H2 como nueva raíz (replyTo null)', !!h2 && h2.replyTo === null);\nconst repIds = res.reparented.map((x) => x.id).sort((a, b) => a - b);\nr.eq('[T-18-03] H1 y H2 figuran en reparented', JSON.stringify(repIds), JSON.stringify([H1.id, H2.id]));\nr.ok('[T-18-03] el nuevo replyTo en reparented es null (raíz → null)', res.reparented.every((x) => x.replyTo === null));\nr.ok('[T-18-03] el hilo sobrevive sin R (R ya no está)', !fresh.messages.some((m) => m.id === R.id));"
-      },
-      {
-        "ref": "back-borrado",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "borrar un msgId inexistente es idempotente",
-        "dado": "Un chat con algunos mensajes pero sin ningún mensaje con id 999",
-        "cuando": "Se llama deleteMessage(root, chatId, 999, { cascade: false })",
-        "entonces": "No lanza error; devuelve { removed: [], reparented: [] } y el chat queda igual",
-        "id": "T-18-04",
-        "codigo": "const fs = await import('fs'); const os = await import('os'); const path = await import('path');\nconst { createChat, appendMessage, readChat, deleteMessage } = await import('../../scripts/lib/forge-store.js');\nconst root = fs.mkdtempSync(path.join(os.tmpdir(), 'nbla-del-04-'));\nconst chat = createChat(root, { type: 'tarea', title: 'T' });\nappendMessage(root, chat.id, { author: 'tie', text: 'uno', replyTo: null });\nappendMessage(root, chat.id, { author: 'tie', text: 'dos', replyTo: 1 });\nconst antes = JSON.stringify(readChat(root, chat.id).messages);\nlet res, threw = false;\ntry { res = deleteMessage(root, chat.id, 999, { cascade: false }); } catch { threw = true; }\nr.ok('[T-18-04] borrar un id inexistente NO lanza', !threw);\nr.eq('[T-18-04] removed vacío', JSON.stringify([...res.removed]), JSON.stringify([]));\nr.eq('[T-18-04] reparented vacío', JSON.stringify(res.reparented), JSON.stringify([]));\nr.eq('[T-18-04] el chat queda exactamente igual (idempotente)', JSON.stringify(readChat(root, chat.id).messages), antes);"
-      },
-      {
-        "ref": "back-borrado",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "el endpoint DELETE valida conversación y msgId",
-        "dado": "El endpoint DELETE /api/chats/:id/messages/:msgId montado en forge.js",
-        "cuando": "Se llama con un :id de chat inexistente, y por otro lado con un :msgId no numérico/ausente",
-        "entonces": "Responde 404 cuando la conversación no existe y 400 cuando el msgId no es válido; con datos válidos responde 200 con { removed, reparented }",
-        "id": "T-18-05",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst src = fs.readFileSync(path.join(ROOT, 'scripts', 'forge.js'), 'utf8');\n// El endpoint DELETE de borrado por mensaje existe y cuelga del árbol replyTo.\nr.ok('[T-18-05] existe DELETE /api/chats/:id/messages/:msgId',\n  /app\\.delete\\('\\/api\\/chats\\/:id\\/messages\\/:msgId'/.test(src));\n// Aísla el cuerpo del handler para afirmar sobre él.\nconst i = src.indexOf(\"app.delete('/api/chats/:id/messages/:msgId'\");\nconst body = i === -1 ? '' : src.slice(i, i + 900);\nr.ok('[T-18-05] delega en deleteMessage del store', /deleteMessage\\(/.test(body));\nr.ok('[T-18-05] lee el flag cascade (body/query)', /cascade/.test(body));\nr.ok('[T-18-05] 404 cuando la conversación no existe', /status\\(404\\)/.test(body));\nr.ok('[T-18-05] 400 cuando el msgId no es válido', /status\\(400\\)/.test(body));\nr.ok('[T-18-05] responde { removed, reparented } en el caso bueno', /removed/.test(body) && /reparented/.test(body));"
-      },
-      {
-        "ref": "front-borrado",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "el front pregunta solo cuando el mensaje tiene descendientes",
-        "dado": "El render del hilo en public/forge/index.html con un mensaje raíz que tiene hijos y otro mensaje que es hoja",
-        "cuando": "Se pulsa el botón de borrar de cada uno",
-        "entonces": "Para el mensaje con descendientes ofrece la elección «Borrar todo el hilo» (cascade=true) vs «Solo este mensaje» (cascade=false); para la hoja borra directo (con confirm) sin preguntar cascada",
-        "id": "T-18-06",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\n// 1) Hay una acción de borrado POR MENSAJE que pega al endpoint nuevo.\nr.ok('[T-18-06] el front llama a DELETE /api/chats/<id>/messages/<msgId>',\n  /\\/api\\/chats\\/[^'\"`]*\\/messages\\//.test(html) && /method:\\s*'DELETE'/.test(html));\n// 2) Existe la función que decide el borrado de un mensaje.\nconst m = html.match(/(?:async\\s+)?function\\s+(borrarMensaje|deleteMessage|delMensaje)\\s*\\([^)]*\\)\\s*\\{[\\s\\S]{0,1600}?\\n  \\}/);\nr.ok('[T-18-06] existe la función de borrado por mensaje (borrarMensaje/…)', !!m);\nconst fn = m ? m[0] : '';\n// 3) Decide preguntar SOLO si el mensaje tiene descendientes en el árbol local.\nr.ok('[T-18-06] mira si el mensaje tiene hijos/descendientes (replyTo) antes de actuar',\n  /replyTo/.test(fn) && /(descend|hijo|child)/i.test(fn));\n// 4) Con descendientes ofrece la elección cascada sí/no; hoja → confirm directo.\nr.ok('[T-18-06] ofrece ambas ramas cascade=true y cascade=false',\n  /cascade/.test(fn) && /true/.test(fn) && /false/.test(fn));\nr.ok('[T-18-06] la hoja se borra directa con confirm()', /confirm\\(/.test(fn));"
       }
     ],
     "aprobado": false,
     "aprobadoAt": null,
     "generado": true,
     "generadoAt": "2026-06-07T02:33:48.828Z",
-    "ultimaCorrida": "2026-06-07T03:08:50.327Z"
+    "ultimaCorrida": "2026-06-07T03:08:55.988Z"
   },
   "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t018-1780800055633",
   "branch": "miguel/tarea-018-1780800055633",
@@ -178,5 +145,8 @@
   "construido": true,
   "construidoAt": "2026-06-07T02:44:38.371Z",
   "brought": true,
-  "broughtAt": "2026-06-07T03:08:50.540Z"
+  "broughtAt": "2026-06-07T03:08:50.540Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-07T03:08:50.832Z",
+  "masterCommit": "0799c97e8b7de9864d08b8e6c2979d45dbb57def"
 }

@@ -31,7 +31,7 @@
       {
         "ref": "reset-seleccion-al-principal",
         "nivel": "persistente",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "firstMsgId() devuelve el primer mensaje raíz en orden cronológico",
         "dado": "Un hilo con varios mensajes raíz reales (no colapsados) y algún sub-hilo colgando",
         "cuando": "Se llama a firstMsgId()",
@@ -42,7 +42,7 @@
       {
         "ref": "reset-seleccion-al-principal",
         "nivel": "persistente",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "Re-clic sobre el rey actual (que no es el primero) vuelve al hilo principal",
         "dado": "El rey seleccionado es un mensaje de un sub-hilo (selectedId != firstMsgId)",
         "cuando": "Se vuelve a clicar esa misma frase ya seleccionada (selectMsg(selectedId))",
@@ -53,7 +53,7 @@
       {
         "ref": "reset-seleccion-al-principal",
         "nivel": "persistente",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "Re-clic sobre el rey cuando ya es el primero no hace nada",
         "dado": "El rey ya es el primer mensaje (selectedId === firstMsgId)",
         "cuando": "Se vuelve a clicar esa frase",
@@ -64,7 +64,7 @@
       {
         "ref": "reset-seleccion-al-principal",
         "nivel": "persistente",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "Clic en una frase distinta entra a ese sub-hilo",
         "dado": "Un hilo con el rey en el principal y otros mensajes disponibles",
         "cuando": "Se clica un mensaje distinto del rey (selectMsg(otroId))",
@@ -75,7 +75,7 @@
       {
         "ref": "reset-seleccion-al-principal",
         "nivel": "persistente",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "Clic en el fondo vacío del hilo vuelve al principal",
         "dado": "El rey está en un sub-hilo y threadEl tiene su handler de fondo cableado",
         "cuando": "Se dispara un click cuyo e.target es el propio fondo del hilo (no una .bubble/.node)",
@@ -88,6 +88,13 @@
     "aprobadoAt": null,
     "generado": true,
     "generadoAt": "2026-06-07T02:34:29.079Z",
-    "testsFile": "forge/tests/tarea-19.test.js"
-  }
+    "ultimaCorrida": "2026-06-07T03:11:47.838Z"
+  },
+  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t019-1780801846592",
+  "branch": "miguel/tarea-019-1780801846592",
+  "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
+  "base": "b71c1f2705cdf848a024afff18090232084032d4",
+  "builtAt": "2026-06-07T03:10:47.148Z",
+  "brought": true,
+  "broughtAt": "2026-06-07T03:11:48.037Z"
 }
