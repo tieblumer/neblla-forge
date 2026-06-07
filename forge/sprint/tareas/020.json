@@ -31,7 +31,7 @@
       {
         "ref": "iconos-tarea-en-chats",
         "nivel": "persistente",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "Un chat que parió tareas muestra sus iconos de estado en la fila",
         "dado": "La lista trae un chat con id X y /api/tareas devuelve 2 tareas decoradas cuyo fromChat === X, cada una con su icon.",
         "cuando": "Se pinta la lista de conversaciones (loadList + el re-pintado disparado por loadTareas).",
@@ -42,7 +42,7 @@
       {
         "ref": "iconos-tarea-en-chats",
         "nivel": "persistente",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "Los iconos se ordenan por gravedad según el orden de GRUPOS",
         "dado": "Un chat con tareas en distintos grupos (p.ej. una en 'terminadas' y otra en 'revisar') que cuelgan del mismo fromChat.",
         "cuando": "Se pintan los iconos de esa fila.",
@@ -53,7 +53,7 @@
       {
         "ref": "iconos-tarea-en-chats",
         "nivel": "persistente",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "Tope de 3 iconos visibles más un '+N' cuando sobran",
         "dado": "Un chat con 5 tareas colgando de su fromChat.",
         "cuando": "Se pinta su fila.",
@@ -64,7 +64,7 @@
       {
         "ref": "iconos-tarea-en-chats",
         "nivel": "persistente",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "Un chat sin tareas no muestra iconos",
         "dado": "Un chat cuyo id no es el fromChat de ninguna tarea de /api/tareas.",
         "cuando": "Se pinta la lista.",
@@ -75,7 +75,7 @@
       {
         "ref": "iconos-tarea-en-chats",
         "nivel": "temporal",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "Sin caché propia: una tarea que pierde su fromChat desaparece del cruce al refrescar",
         "dado": "Un chat que mostraba 2 iconos y un siguiente /api/tareas en el que una de esas tareas ya no tiene ese fromChat (fue borrada/restaurada).",
         "cuando": "loadTareas() vuelve a refrescar y re-pinta.",
@@ -86,7 +86,7 @@
       {
         "ref": "general",
         "nivel": "temporal",
-        "estado": "escrito",
+        "estado": "pasa",
         "titulo": "El truncado del título sigue intacto con la fila de iconos",
         "dado": "Un chat con título largo y con iconos de tareas en su fila.",
         "cuando": "Se renderiza la fila .chat-item .title.",
@@ -99,11 +99,15 @@
     "aprobadoAt": null,
     "generado": true,
     "generadoAt": "2026-06-07T03:13:23.795Z",
-    "testsFile": "forge/tests/tarea-20.test.js"
+    "ultimaCorrida": "2026-06-07T12:21:44.595Z"
   },
   "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t020-1780832601673",
   "branch": "miguel/tarea-020-1780832601673",
   "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
   "base": "e48680171df2e3fa73240db6dfdd93e5712d040f",
-  "builtAt": "2026-06-07T11:43:23.034Z"
+  "builtAt": "2026-06-07T11:43:23.034Z",
+  "construido": true,
+  "construidoAt": "2026-06-07T11:45:56.169Z",
+  "brought": true,
+  "broughtAt": "2026-06-07T12:21:44.864Z"
 }

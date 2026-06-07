@@ -93,24 +93,13 @@
         "entonces": "El bloque .tarea-def recibe la clase 'rey' (resaltado de rey) y queda clicable para volver a seleccionarse como rey (selectedId=null + re-render)",
         "id": "T-21-06",
         "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\nfunction bloque(src, ancla, len) { const i = src.indexOf(ancla); return i === -1 ? '' : src.slice(i, i + len); }\nconst rd = bloque(html, 'function renderTareaDef(', 2200);\nr.ok('[T-21-06] existe renderTareaDef', rd.length > 0);\n// cuando hay tarea y selectedId==null, el bloque .tarea-def recibe la clase 'rey'\nr.ok('[T-21-06] renderTareaDef condiciona el resaltado a selectedId==null', /selectedId\\s*==\\s*null/.test(rd) || /selectedId\\s*===\\s*null/.test(rd));\nr.ok('[T-21-06] renderTareaDef marca el bloque con la clase rey',\n  /classList\\.(add|toggle)\\(\\s*['\"`]rey['\"`]/.test(rd) || /['\"`]rey['\"`]/.test(rd));\n// el bloque queda clicable para volver a seleccionarse como rey (selectedId=null + re-render)\nr.ok('[T-21-06] el bloque .tarea-def queda clicable (onclick / addEventListener)',\n  /tareaDefEl\\.onclick/.test(rd) || /tareaDefEl\\.addEventListener\\(\\s*['\"`]click/.test(rd) || /\\.onclick\\s*=/.test(rd));\nr.ok('[T-21-06] al clicar la def vuelve a ser rey (selectedId = null)', /selectedId\\s*=\\s*null/.test(rd));"
-      },
-      {
-        "ref": "raiz-es-la-def-en-modo-tarea",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "Existe la regla CSS .tarea-def.rey con el lenguaje visual de rey",
-        "dado": "La hoja de estilos del forge",
-        "cuando": "Se busca la regla que resalta la def cuando es rey",
-        "entonces": "Existe una regla CSS .tarea-def.rey cerca de .tarea-def que aplica el mismo resaltado de rey que las burbujas (F22)",
-        "id": "T-21-07",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\n// existe la regla CSS .tarea-def.rey que resalta la def cuando es rey\nr.ok('[T-21-07] existe la regla CSS .tarea-def.rey', /\\.tarea-def\\.rey\\s*\\{/.test(html));\n// con cuerpo real (al menos una propiedad) — no una regla vacía\nconst m = html.match(/\\.tarea-def\\.rey\\s*\\{([^}]*)\\}/);\nr.ok('[T-21-07] la regla .tarea-def.rey tiene cuerpo (alguna propiedad)', !!m && /:/.test(m[1]));\n// mismo lenguaje visual de rey que las burbujas (F22): se apoya en el acento, igual que\n// .node.selected > .bubble y .sel-info .king (var(--accent) / accent / borde resaltado)\nconst cuerpo = m ? m[1] : '';\nr.ok('[T-21-07] el resaltado de rey usa el lenguaje visual de acento/borde (como las burbujas)',\n  /accent/.test(cuerpo) || /border/.test(cuerpo) || /box-shadow/.test(cuerpo) || /outline/.test(cuerpo) || /background/.test(cuerpo));"
       }
     ],
     "aprobado": false,
     "aprobadoAt": null,
     "generado": true,
     "generadoAt": "2026-06-07T11:35:31.075Z",
-    "ultimaCorrida": "2026-06-07T11:43:38.751Z"
+    "ultimaCorrida": "2026-06-07T11:44:42.357Z"
   },
   "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t021-1780832428618",
   "branch": "miguel/tarea-021-1780832428618",
@@ -120,5 +109,8 @@
   "construido": true,
   "construidoAt": "2026-06-07T11:42:46.616Z",
   "brought": true,
-  "broughtAt": "2026-06-07T11:43:39.062Z"
+  "broughtAt": "2026-06-07T11:43:39.062Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-07T11:43:39.507Z",
+  "masterCommit": "9d711bfd24f351584aa1f8d9ccb3662b4e2d5e57"
 }

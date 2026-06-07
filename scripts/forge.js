@@ -145,6 +145,12 @@ function vozDe(author) {
 //   • escribir incluye codigo → Write, Edit, Bash (manos de escribir ficheros)
 //   • herramientas MCP        → mcp__forge__<cada una> (contestar / preguntar…)
 // Si el empleado no tiene ficha, una base segura de solo lectura + contestar.
+// ¿el empleado puede LEER el código? (scope.lee !== 'nada' → recibe Read/Grep/Glob).
+// El prompt lo usa para no prometerle ojos que no tiene (si no, alucina código).
+function puedeLeerCodigo(author) {
+  const p = author ? findByRol(FORGE_DIR, author) : null;
+  return !!(p && p.scope && p.scope.lee && p.scope.lee !== 'nada');
+}
 function allowedToolsFor(author) {
   const p = author ? findByRol(FORGE_DIR, author) : null;
   if (!p) return 'Read,Grep,Glob,mcp__forge__contestar';
@@ -1256,7 +1262,7 @@ app.post('/api/chats/:id/charla', (req, res) => {
     const scope = ACTION_SCOPES.includes(req.body && req.body.scope) ? req.body.scope : 'mensaje';
     launchHeadless({
       chatId: id,
-      prompt: charlaPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, target, scope), voz: vozDe('iris') }),
+      prompt: charlaPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, target, scope), voz: vozDe('iris'), puedeLeer: puedeLeerCodigo('iris') }),
       extraEnv: { FORGE_REPLY_TO: String(parent), FORGE_MSG_TYPE: 'charla', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'iris' },
     });
     return res.status(202).json({ pendingParent: parent, scope, spawned: true });
@@ -1274,7 +1280,7 @@ app.post('/api/chats/:id/charla', (req, res) => {
   // sin bloquear; Iris contesta colgando de mi turno
   launchHeadless({
     chatId: id,
-    prompt: charlaPrompt({ threadText: buildThreadText(id), voz: vozDe('iris') }),
+    prompt: charlaPrompt({ threadText: buildThreadText(id), voz: vozDe('iris'), puedeLeer: puedeLeerCodigo('iris') }),
     extraEnv: { FORGE_REPLY_TO: String(tieMsg.id), FORGE_MSG_TYPE: 'charla', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'iris' },
   });
   // pendingParent = de quién colgará la respuesta de Iris (su turno cuelga del de
@@ -1348,7 +1354,7 @@ app.post('/api/chats/:id/challenge', (req, res) => {
 
   launchHeadless({
     chatId: id,
-    prompt: williamChallengePrompt({ threadText: buildThreadText(id), focoText, steer: req.body && req.body.steer, voz: vozDe('william') }),
+    prompt: williamChallengePrompt({ threadText: buildThreadText(id), focoText, steer: req.body && req.body.steer, voz: vozDe('william'), puedeLeer: puedeLeerCodigo('william') }),
     extraEnv: { FORGE_REPLY_TO: String(targetId), FORGE_MSG_TYPE: 'challenge', FORGE_INTENT: 'challenge', FORGE_AUTHOR: 'william' },
   });
   // pendingParent = el challenge de William cuelga del mensaje objetivo: el
@@ -1400,7 +1406,7 @@ app.post('/api/chats/:id/investigar', (req, res) => {
   if (r.error) return res.status(400).json({ error: r.error });
   launchHeadless({
     chatId: id,
-    prompt: stevensPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, r.target, r.scope), steer: req.body && req.body.steer, target: targetDesc(), voz: vozDe('stevens') }),
+    prompt: stevensPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, r.target, r.scope), steer: req.body && req.body.steer, target: targetDesc(), voz: vozDe('stevens'), puedeLeer: puedeLeerCodigo('stevens') }),
     extraEnv: { FORGE_REPLY_TO: r.targetId == null ? '' : String(r.targetId), FORGE_MSG_TYPE: 'investigacion', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'stevens' },
   });
   res.status(202).json({ spawned: true, targetId: r.targetId, pendingParent: r.targetId, scope: r.scope });
@@ -1415,7 +1421,7 @@ app.post('/api/chats/:id/consejo', (req, res) => {
   if (r.error) return res.status(400).json({ error: r.error });
   launchHeadless({
     chatId: id,
-    prompt: miyagiPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, r.target, r.scope), steer: req.body && req.body.steer, target: targetDesc(), voz: vozDe('miyagi') }),
+    prompt: miyagiPrompt({ threadText: buildThreadText(id), focoText: buildFocoText(chat, r.target, r.scope), steer: req.body && req.body.steer, target: targetDesc(), voz: vozDe('miyagi'), puedeLeer: puedeLeerCodigo('miyagi') }),
     extraEnv: { FORGE_REPLY_TO: r.targetId == null ? '' : String(r.targetId), FORGE_MSG_TYPE: 'consejo', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'miyagi' },
   });
   res.status(202).json({ spawned: true, targetId: r.targetId, pendingParent: r.targetId, scope: r.scope });
@@ -1442,6 +1448,7 @@ app.post('/api/chats/:id/discutir', (req, res) => {
       threadText: buildThreadText(id),
       focoText: buildFocoText(chat, r.target, r.scope),
       stance, steer: req.body && req.body.steer, voz: vozDe(author), genero,
+      puedeLeer: puedeLeerCodigo(author),
     }),
     extraEnv: {
       FORGE_REPLY_TO: r.targetId == null ? '' : String(r.targetId), FORGE_MSG_TYPE: 'discusion',

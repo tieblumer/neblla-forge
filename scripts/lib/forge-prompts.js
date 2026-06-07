@@ -19,10 +19,20 @@ const CIERRE_CONTESTAR =
   'Tu ÚNICA forma de escribir es la herramienta MCP `contestar`: llámala con tu\n'
   + 'texto en el campo `text`. No escribes en ningún otro sitio. En cuanto contestes, termina.';
 
-// Nota de herramientas de solo-lectura, para los perfiles que auditan/leen código.
+// Nota de ACCESO AL CÓDIGO, fiel al permiso REAL del perfil (scope.lee). Lane 1
+// pasa `puedeLeer` (derivado de people/<slug>.json); el prompt NUNCA debe prometer
+// ojos que el empleado no tiene — si lo hace, el empleado "habla de código" que no
+// puede ver y lo ALUCINA (nombres de ficheros/funciones que suenan verídicos).
 const SOLO_LECTURA =
   'Tienes Read, Grep y Glob (solo lectura) para mirar el código antes de hablar.\n'
   + 'NO tienes Edit, Write ni Bash: no puedes modificar nada.';
+const CIEGO_AL_CODIGO =
+  'NO tienes acceso al código: no puedes abrir ficheros (ni Read/Grep/Glob ni nada).\n'
+  + 'Habla a nivel de IDEAS. NUNCA cites ficheros, funciones o variables concretas como\n'
+  + 'si los hubieras visto: no los has visto. Si una idea necesita un dato del código,\n'
+  + 'dilo como hipótesis ("seguramente habrá algo que…") o sugiere que lo confirme\n'
+  + 'Stevens, que sí audita el código real. Inventar nombres que suenan ciertos engaña.';
+function notaCodigo(puedeLeer) { return puedeLeer ? SOLO_LECTURA : CIEGO_AL_CODIGO; }
 
 // Brevedad CÁLIDA (clave para Tie, disléxico): la idea al grano, pero sin perder la
 // humanidad. Comprimir con acrónimos o frases recortadas le DUELE — no lo hagas.
@@ -91,7 +101,7 @@ function direccionArr(steer) {
 // ── Iris — la charla informal (migrado de forge.js) ──────────────────────────
 // `focoText` (opcional) = modo PROACTIVO: Tie seleccionó un bloque pero NO escribió
 // nada; Iris arranca la charla sobre ese bloque por iniciativa propia.
-export function charlaPrompt({ threadText, focoText, voz }) {
+export function charlaPrompt({ threadText, focoText, voz, puedeLeer = true }) {
   const apertura = vozLineas(voz, [
     'Eres Iris, la CTO de Neblla, en una charla informal con Tie (el CEO) dentro',
     'del forge. Esto es una CHARLA: responde breve, claro y cálido, al grano.',
@@ -113,7 +123,7 @@ export function charlaPrompt({ threadText, focoText, voz }) {
       '',
       AL_GRANO,
       '',
-      SOLO_LECTURA,
+      notaCodigo(puedeLeer),
       '',
       CIERRE_CONTESTAR,
     ].join('\n');
@@ -129,7 +139,7 @@ export function charlaPrompt({ threadText, focoText, voz }) {
     '',
     AL_GRANO,
     '',
-    SOLO_LECTURA,
+    notaCodigo(puedeLeer),
     '',
     CIERRE_CONTESTAR,
   ].join('\n');
@@ -138,7 +148,7 @@ export function charlaPrompt({ threadText, focoText, voz }) {
 // ── William — el abogado del diablo (migrado de forge.js) ────────────────────
 // `focoText` = el alcance ya resuelto por Lane 1 (mensaje/rama/conversación/objeto),
 // con su encuadre (incluida la auto-incredulidad si el objetivo es del propio William).
-export function williamChallengePrompt({ threadText, focoText, steer, voz }) {
+export function williamChallengePrompt({ threadText, focoText, steer, voz, puedeLeer = false }) {
   return [
     ...vozLineas(voz, [
       'Eres William, el abogado del diablo de Neblla. Tu oficio: poner a prueba con un',
@@ -154,7 +164,7 @@ export function williamChallengePrompt({ threadText, focoText, steer, voz }) {
     '',
     BREVEDAD,
     '',
-    SOLO_LECTURA,
+    notaCodigo(puedeLeer),
     '',
     CIERRE_CONTESTAR,
   ].join('\n');
@@ -371,7 +381,7 @@ function objetivoCicloArr(target) {
 // Audita el ESTADO REAL del código y es honesto sobre lo que de verdad hay; no
 // levanta la voz porque su trabajo habla por él. No inventa: si no lo ha leído, no
 // lo afirma; cita lo que encontró y dice qué no pudo confirmar.
-export function stevensPrompt({ threadText, focoText, steer, target, voz }) {
+export function stevensPrompt({ threadText, focoText, steer, target, voz, puedeLeer = true }) {
   return [
     ...vozLineas(voz, [
       'Eres Stevens, el investigador de Neblla — un mayordomo de la vieja escuela:',
@@ -391,7 +401,7 @@ export function stevensPrompt({ threadText, focoText, steer, target, voz }) {
     '',
     BREVEDAD,
     '',
-    SOLO_LECTURA,
+    notaCodigo(puedeLeer),
     '',
     CIERRE_CONTESTAR,
   ].join('\n');
@@ -401,7 +411,7 @@ export function stevensPrompt({ threadText, focoText, steer, target, voz }) {
 // El jardinero que ve lo que tú no ves: paciencia, no fuerza. Da una OPINIÓN
 // honesta sobre qué buscamos, de alguien que no puede ofrecer nada más que
 // conocimiento y ve más allá del fuego pasajero (la urgencia del momento).
-export function miyagiPrompt({ threadText, focoText, steer, target, voz }) {
+export function miyagiPrompt({ threadText, focoText, steer, target, voz, puedeLeer = false }) {
   return [
     ...vozLineas(voz, [
       'Eres Mr. Miyagi, el consejero de Neblla. Eres el jardinero que ve lo que otros no',
@@ -420,7 +430,7 @@ export function miyagiPrompt({ threadText, focoText, steer, target, voz }) {
     '',
     BREVEDAD,
     '',
-    SOLO_LECTURA,
+    notaCodigo(puedeLeer),
     '',
     CIERRE_CONTESTAR,
   ].join('\n');
@@ -434,7 +444,7 @@ export function miyagiPrompt({ threadText, focoText, steer, target, voz }) {
 //   'defiende' → a favor, pero obligado a SUMAR un paso extra ("y si encima…").
 //   'rechaza'  → en contra, pero con lucidez: una grieta concreta o una vía alterna.
 // El AUTHOR del mensaje (romina/ariel) lo fija Lane 1; aquí solo cambia el bando.
-export function discutirPrompt({ threadText, focoText, stance, steer, voz, genero }) {
+export function discutirPrompt({ threadText, focoText, stance, steer, voz, genero, puedeLeer = false }) {
   const defiende = stance === 'defiende';
   const bando = defiende
     ? [
@@ -475,7 +485,7 @@ export function discutirPrompt({ threadText, focoText, stance, steer, voz, gener
     '',
     BREVEDAD,
     '',
-    SOLO_LECTURA,
+    notaCodigo(puedeLeer),
     '',
     CIERRE_CONTESTAR,
   ].join('\n');

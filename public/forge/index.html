@@ -260,6 +260,12 @@
   .chat-item .body { flex: 1 1 auto; min-width: 0; }
   .chat-item .title { font-weight: 400; font-size: 13px; line-height: 1.5;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* fila de iconos de estado de las tareas que nacieron de este chat (tarea #020).
+     Contenedor inline para convivir con el título truncado sin romper su layout. */
+  .chat-item .title .chat-tareas { display: inline-flex; align-items: center; gap: 2px;
+    margin-left: 6px; vertical-align: middle; }
+  .chat-item .title .ct-ico { font-size: 11px; line-height: 1; }
+  .chat-item .title .ct-mas { font-size: 10px; line-height: 1; color: var(--muted); margin-left: 1px; }
   /* botón de borrar (tarea #001): oculto hasta que el ratón pasa por la fila */
   .chat-del {
     flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
@@ -1361,8 +1367,10 @@
       li.className = 'chat-item' + (c.id === active ? ' active' : '');
       li.innerHTML = '<div class="row"><div class="body"><div class="title"></div></div>'
         + '<button class="chat-del" title="Borrar conversación (definitivo)">🗑</button></div>';
+      li.dataset.chatId = c.id;
       li.querySelector('.title').textContent = c.title;
       li.querySelector('.title').title = c.title + '  (#' + c.id + ' · ' + (c.type || '') + ')';
+      pintarIconosTareas(li.querySelector('.title'), c.id);
       li.querySelector('.body').onclick = () => openChat(c.id);
       li.querySelector('.chat-del').onclick = (e) => { e.stopPropagation(); deleteChat(c); };
       listEl.appendChild(li);
@@ -1395,12 +1403,65 @@
   // qué tareas dejó el usuario desplegadas a mano (sobrevive a los refrescos del sondeo).
   const tareaAbierta = {};
 
+  // Índice compartido chatId → tareas decoradas que nacieron de ese chat (tarea #020).
+  // loadTareas() lo RECONSTRUYE en cada refresco (sin caché propia): siempre lee la lista
+  // viva, así una tarea borrada —que pierde su fromChat vía restoreStubbedMessage— se cae
+  // sola del cruce. loadList() y el re-pintado lo leen para pintar iconos en cada fila.
+  let tareasPorChat = {};
+  // Orden canónico de gravedad de los GRUPOS (revisar→encurso→porhacer→terminadas): un
+  // ✕ (revisar) va primero y nunca queda escondido tras los verdes cuando hay tope/+N.
+  const GRUPOS_ORDEN = ['revisar', 'encurso', 'porhacer', 'terminadas'];
+
+  // Pinta, dentro del .title de una fila .chat-item, un contenedor inline con los iconos
+  // de estado de las tareas de ese chat: ordenados por gravedad, tope de 3 + '+N' gris.
+  function pintarIconosTareas(titleEl, chatId) {
+    if (!titleEl) return;
+    const prev = titleEl.querySelector('.chat-tareas');
+    if (prev) prev.remove();                       // sin estado obsoleto: siempre re-pinta de cero
+    const tareas = (tareasPorChat[chatId] || []).slice();
+    if (!tareas.length) return;                    // chat sin tareas → ni contenedor
+    tareas.sort((a, b) => {
+      const ra = GRUPOS_ORDEN.indexOf(a.grupo), rb = GRUPOS_ORDEN.indexOf(b.grupo);
+      return (ra === -1 ? 99 : ra) - (rb === -1 ? 99 : rb);
+    });
+    const cont = document.createElement('span');
+    cont.className = 'chat-tareas';
+    for (const t of tareas.slice(0, 3)) {
+      const ic = document.createElement('span');
+      ic.className = 'ct-ico'; ic.textContent = t.icon; ic.title = t.title || '';
+      cont.appendChild(ic);
+    }
+    if (tareas.length > 3) {
+      const mas = document.createElement('span');
+      mas.className = 'ct-mas'; mas.textContent = '+' + (tareas.length - 3);
+      cont.appendChild(mas);
+    }
+    titleEl.appendChild(cont);
+  }
+
+  // Re-pinta los iconos en TODAS las filas de chat ya montadas, leyendo el índice vivo.
+  // Lo dispara loadTareas() tras reconstruir el cruce, sin rehacer toda la lista.
+  function repintarIconosChats() {
+    if (!listEl) return;
+    for (const li of listEl.querySelectorAll('.chat-item')) {
+      pintarIconosTareas(li.querySelector('.title'), li.dataset.chatId);
+    }
+  }
+
   async function loadTareas() {
     let data;
     try { data = await (await fetch('/api/tareas')).json(); } catch { return; }
     // el motor ya devuelve {tareas: [decoradas+ordenadas], grupos: [...]}.
     const ts = (data && data.tareas) || [];
     const grupos = (data && data.grupos) || [];
+    // reconstruye el índice chat→tareas (reset + relleno por fromChat) y re-pinta los
+    // iconos en la lista de chats. Sin caché: lo de antes se tira entero cada refresco.
+    tareasPorChat = {};
+    for (const t of ts) {
+      if (!t.fromChat) continue;
+      (tareasPorChat[t.fromChat] = tareasPorChat[t.fromChat] || []).push(t);
+    }
+    repintarIconosChats();
     // sincroniza la tarea abierta con lo último del servidor (p.ej. el plan que
     // Aubé acaba de adoptar) y re-pinta su ficha si cambió — salvo que la estés
     // editando a mano (no pisar tu edición a medias).
