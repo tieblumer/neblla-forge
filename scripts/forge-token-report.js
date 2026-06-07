@@ -26,7 +26,7 @@ const ROOT = process.env.FORGE_ROOT ? path.resolve(process.env.FORGE_ROOT) : FOR
 const argv = process.argv.slice(2);
 const full = argv.includes('--full');
 const fileArg = argv.find((a) => !a.startsWith('--'));
-const LOG = fileArg ? path.resolve(fileArg) : path.join(ROOT, 'sprint', 'token-log.jsonl');
+const LOG = fileArg ? path.resolve(fileArg) : path.join(ROOT, 'forge', 'sprint', 'token-log.jsonl');
 
 function readLog(p) {
   if (!fs.existsSync(p)) {

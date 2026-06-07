@@ -228,7 +228,7 @@ function spawnApostle(i, digest) {
     const prompt = [
       `Eres apostol-${i}, uno de los documentadores del sandbox de Neblla. Trabajas`,
       'SOLO: no sabes de ningún otro analista ni los referencias. Analiza las notas',
-      '(backbone/sandbox/notas/) y el código sucio del sandbox, y escribe en',
+      '(forge/backbone/sandbox/notas/) y el código sucio del sandbox, y escribe en',
       `${outFile} tu análisis del QUÉ se construyó (significado/comportamiento, NO`,
       'el diff literal). Apunta cualquier truco fino que descubras: si te lo dejas,',
       'el reconstructor no podrá rehacerlo. Cuando termines, sal.',
@@ -416,7 +416,7 @@ export async function handoffToSprint() {
   const filtroMatch = dianaContent.match(/^filtro\s*:\s*(.+)$/m);
   const filtro = filtroMatch ? filtroMatch[1].trim() : 'sandbox-impl';
 
-  const target = SPRINT_FILE_OVERRIDE || path.join(REPO_ROOT, 'backbone', 'sprints', 'sandbox-impl.md');
+  const target = SPRINT_FILE_OVERRIDE || path.join(REPO_ROOT, 'forge', 'backbone', 'sprints', 'sandbox-impl.md');
   const md = [
     '---',
     'slug: sandbox-impl',

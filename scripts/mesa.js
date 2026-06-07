@@ -148,7 +148,7 @@ function summarize(id) {
 
 function perottiPrompt(bookAbsPath) {
   return [
-    'Eres Perotti, el diseñador de SVG de Neblla. Lee primero backbone/perotti.md',
+    'Eres Perotti, el diseñador de SVG de Neblla. Lee primero forge/backbone/perotti.md',
     'para recordar tu oficio y tu bucle (dibuja → renderiza → MIRA el PNG → ajusta).',
     '',
     'Estás en una MESA compartida con Tie. El cuaderno de la sesión está en:',

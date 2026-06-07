@@ -83,7 +83,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ROOT = the PRODUCT this sprint builds (project/), NOT the forge. Sprint state,
 // the diana gate (`node tests/run.js`), worker cwd and version all ride this.
 const ROOT = PROJECT_ROOT;
-const SPRINTS_DIR = path.join(ROOT, 'backbone', 'sprints');
+const SPRINTS_DIR = path.join(ROOT, 'forge', 'backbone', 'sprints');
 const VERDICT_FILE = path.join(SPRINTS_DIR, '.verdict.json');
 const HOTFIX_FILE = path.join(SPRINTS_DIR, '.hotfix-needed.json');
 const VERSION_FILE = path.join(ROOT, 'public', 'version.txt');
@@ -382,7 +382,7 @@ function findActiveSlug(explicitSlug) {
 // verdict (a JSON literal, or a path to a JSON file). Used by the diana suite so
 // no real `claude` is summoned.
 function readVerdictFile() {
-  if (!exists(VERDICT_FILE)) return { invalid: true, reason: 'no se escribió backbone/sprints/.verdict.json' };
+  if (!exists(VERDICT_FILE)) return { invalid: true, reason: 'no se escribió forge/backbone/sprints/.verdict.json' };
   let raw;
   try { raw = readFile(VERDICT_FILE); } catch (e) { return { invalid: true, reason: 'no se pudo leer .verdict.json: ' + e.message }; }
   let v;
@@ -413,7 +413,7 @@ function runValidator({ role, slug, step, file }) {
   const fileRel = file ? path.relative(ROOT, path.resolve(ROOT, file)).replace(/\\/g, '/') : '(sin artefacto)';
   const prompt =
     `Eres ${role} (ver la seccion "Empleados" de CLAUDE.md): el abogado del diablo / la verdad del estado, en modo headless. ` +
-    `Estas verificando la etapa "${step}" del sprint "${slug}" (backbone/sprints/${slug}.md). ` +
+    `Estas verificando la etapa "${step}" del sprint "${slug}" (forge/backbone/sprints/${slug}.md). ` +
     `El artefacto a juzgar esta en: ${fileRel}. Lee tambien la casilla correspondiente en ## Casillas y la ## Diana del sprint: ese es tu reglamento, NO inventes requisitos nuevos. ` +
     `Ponte incredulo e intenta tumbar la etapa SOLO contra la diana y la definicion escrita. Dos cubos: BLOQUEANTE (rompe la diana, publicaria un bug, o el verde es falso) vs MENOR (mejora/estetica). ` +
     `NO edites codigo, NO edites tests, NO marques casillas — solo lees y razonas (puedes correr "node tests/run.js <filtro>" para comprobar). ` +

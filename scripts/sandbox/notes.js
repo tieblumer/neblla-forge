@@ -52,7 +52,7 @@ export const VALID_STATES = ['libre', 'en-proceso', 'finalizada', 'revision', 'a
 function envRootOrDefault() {
   const override = (process.env.NEBLLA_SANDBOX_DIR || '').trim();
   if (override) return path.resolve(override);
-  return path.join(REPO_ROOT, 'backbone', 'sandbox');
+  return path.join(REPO_ROOT, 'forge', 'backbone', 'sandbox');
 }
 let _root = envRootOrDefault();
 export function setSandboxRoot(dir) { _root = dir ? path.resolve(dir) : envRootOrDefault(); }

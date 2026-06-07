@@ -1,0 +1,20 @@
+{
+  "id": "012",
+  "num": 12,
+  "title": "Cierre como fase navegable: rematar lo que falta para que se vea y colocar bien \"Nuevo ciclo\"",
+  "body": "Miguel ya metió \"Cierre\" como una fase más del recorrido, pero Tie no la ve por ningún lado en la barra. Hay que revisar por qué no aparece la miga \"Spike › Grooming › Sprint › QA › Cierre\" en pantalla y dejar que se llegue a ella con la flecha derecha.\n\nY el botón ⚙ \"Nuevo ciclo\" sigue mal puesto: ahora cuelga a la izquierda de la flecha izquierda y Tiene que estar entre la flecha izquierda y Spike.\n\nTienen el mismo estilo de CSS de los demás\n\nEn resumen la miga tiene los siguientes estados:  \"Nuevo Ciclo › Spike › Grooming › Sprint › QA › Cierre\"",
+  "fromChat": "030",
+  "createdAt": "2026-06-04T22:41:13.307Z",
+  "threadId": "033",
+  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t012-1780644488897",
+  "branch": "miguel/tarea-012-1780644488897",
+  "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
+  "base": "473a1d2e98270c8d64974f22f4aa8f85b62f2f61",
+  "builtAt": "2026-06-05T07:28:09.342Z",
+  "editedAt": "2026-06-04T22:45:56.419Z",
+  "brought": true,
+  "broughtAt": "2026-06-05T07:30:37.690Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-05T07:30:37.991Z",
+  "masterCommit": "168d174f29095d5df0f142038010a218690a1a4d"
+}

@@ -10,7 +10,8 @@
     "mesa": "node scripts/mesa.js",
     "sprint": "node scripts/docs.js",
     "release": "node scripts/release-and-test.js",
-    "test": "node tests/run.js"
+    "test": "node forge/tests/run-forge.js",
+    "test:forge": "node forge/tests/run-forge.js"
   },
   "author": "Tie Blumer",
   "license": "MIT",

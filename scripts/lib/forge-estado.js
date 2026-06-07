@@ -62,8 +62,12 @@ export function subtareasDe(tarea) {
   const t = tarea || {};
   const arr = Array.isArray(t.subtareas) ? t.subtareas : null;
   if (arr && arr.length) {
+    // Si la subtarea trae su PROPIO estado (build en paralelo, un Miguel por carril),
+    // se respeta. Si NO lo trae, hereda el estado GLOBAL de la tarea (mainEstado): así
+    // una tarea partida pero construida/traída de una pieza no se queda en ▢ pendiente.
+    const fallback = mainEstado(t);
     return arr.map((s, i) => {
-      const estado = ESTADOS[s && s.estado] ? s.estado : 'pendiente';
+      const estado = ESTADOS[s && s.estado] ? s.estado : fallback;
       const out = { name: (s && s.name) || (i === 0 ? 'main' : 'sub-' + (i + 1)), estado, icon: iconOf(estado) };
       // el ALCANCE (carril) viaja al front si lo trae: archivos/frontera/noTocar.
       // Lo escribe Aubé al partir (forge-trocear.js); el motor solo lo transporta.
@@ -91,7 +95,39 @@ export function diverge(subs) {
   return new Set((subs || []).map((s) => s.estado)).size > 1;
 }
 
-// Decora una tarea con su estado computado + subtareas (lo que viaja al front).
+// ── EL PASO RECOMENDADO de una tarea (la secuencia natural del ciclo) ─────────
+// Vive AQUÍ, en la forja (no en el navegador), a propósito: cuando una IA tome el
+// papel de orquestador leerá `next` por API y sabrá qué toca SIN mirar la pantalla.
+// Es PURA: decide solo desde el estado PERSISTENTE de la tarea (no del runtime).
+// Devuelve { key, label } o null si la tarea ya está hecha (en master).
+//   rev → plan(Aubé) · aprobar → definir → escribir → ejecutar → probar → completar
+const PASO_LABEL = {
+  rev: 'Revisar con Aubé (crear el plan)',
+  aprobar: 'Aprobar el plan',
+  definir: 'Definir los tests (Ana Liz)',
+  escribir: 'Escribir los tests en código (Ana Liz)',
+  ejecutar: 'Ejecutar — Miguel construye',
+  probar: 'Probar la batería de tests',
+  completar: 'Completar la tarea (subir a master)',
+};
+export function pasoRecomendado(tarea) {
+  const t = tarea || {};
+  const tests = (t.testsPlan && Array.isArray(t.testsPlan.tests)) ? t.testsPlan.tests : [];
+  const hayEscritos = tests.some((x) => x.id && x.estado && x.estado !== 'definido');
+  const seCorrieron = !!(t.testsPlan && t.testsPlan.ultimaCorrida);
+  let key = null;
+  if (!t.plan) key = 'rev';                       // 1 sin plan → Aubé
+  else if (!t.plan.aprobado) key = 'aprobar';     // 2 plan → aprobarlo
+  else if (!tests.length) key = 'definir';        // 3 → definir tests
+  else if (!hayEscritos) key = 'escribir';        // 4 → escribir tests
+  else if (!t.builtAt) key = 'ejecutar';          // 5 → Miguel construye
+  else if (!seCorrieron) key = 'probar';          // 6 → probar la batería
+  else if (!t.enMaster) key = 'completar';        // 7 → completar
+  return key ? { key, label: PASO_LABEL[key] } : null;
+}
+
+// Decora una tarea con su estado computado + subtareas + el paso recomendado (lo
+// que viaja al front Y a una IA orquestadora vía /api/tareas).
 export function decorar(tarea) {
   const subtareas = subtareasDe(tarea);
   const estado = estadoPadre(subtareas);
@@ -102,6 +138,7 @@ export function decorar(tarea) {
     grupo: grupoOf(estado),
     diverge: diverge(subtareas),
     subtareas,
+    next: pasoRecomendado(tarea),
   };
 }
 

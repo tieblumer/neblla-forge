@@ -1,0 +1,131 @@
+{
+  "id": "014",
+  "num": 14,
+  "title": "Borrar una tarea",
+  "body": "Qué se construye y por qué: hoy una tarea (`sprint/tareas/NNN.json`) nace al aprobar a Aubé y no hay forma de eliminarla — la columna derecha solo crece. Añadimos un borrado definitivo, igual que ya existe para las conversaciones (`deleteChat` + 🗑 en la lista izquierda): una papelera en la tarjeta de la tarea que, con confirmación, la borra del disco. Si la tarea tenía su propio hilo (`tarea-hilo`, su `threadId`), se borra también para no dejar un chat huérfano que nadie puede abrir.\n\nEs un calco del borrado de conversación ya construido, así que es pequeño y de bajo riesgo. Lo parto en back y front porque tocan ficheros distintos y se pueden construir a la vez contra un contrato fijo.\n\n**Parte BACK — el almacén y el endpoint**\n- `scripts/lib/forge-store.js`: nueva función `deleteTarea(root, id)`, espejo de `deleteChat`. Resuelve `tareaPath(root, id)`; si no existe → devuelve `false`. Si existe: lee la tarea, y si tiene `threadId` borra primero ese chat con `deleteChat(root, tarea.threadId)` (best-effort, sin lanzar); luego `fs.unlinkSync` del JSON de la tarea y devuelve `true`. Idempotente.\n- `scripts/forge.js`: nuevo endpoint `app.delete('/api/tareas/:id', ...)`, espejo del `DELETE /api/chats/:id` (línea 710). Importa `deleteTarea` del store (junto a los demás en la cabecera, ~línea 28). Llama `deleteTarea(ROOT, req.params.id)`; `false` → `404 {error:'tarea no encontrada'}`; excepción → `500`; OK → `200 {deleted: req.params.id}`.\n- Nota: NO toca el worktree de Miguel si la tarea ya se ejecutó (`tarea.worktree`); el worktree es desechable y vive aparte. Lo dejamos fuera de alcance (borrar la tarea no arrastra ramas de git).\n\n**Parte FRONT — el botón y el repintado**\n- `public/forge/index.html`, función `renderTareaItem` (~línea 824) y su CSS: añadir un botón `🗑` `class=\"tarea-del\"` en la fila `row` de la tarjeta, oculto hasta el rollover (reutiliza el patrón del CSS `.chat-del` de la línea 202). `onclick` con `e.stopPropagation()` (que no abra la tarea) → llama a una nueva `deleteTarea(t)`.\n- Nueva `async function deleteTarea(t)`, espejo de `deleteChat` (línea 779): `confirm('Borrar la tarea \"'+t.title+'\" (#'+t.id+')?\\n\\nEs definitivo: no se puede deshacer.')`; `fetch('/api/tareas/'+t.id, {method:'DELETE'})`; si no OK y no 404 → `alert`; si la tarea borrada era `currentTarea`, limpiar el centro (como hace el borrado de chat con `active`); luego `loadTareas()` para repintar la columna.\n\n**El contrato back ↔ front**\n`DELETE /api/tareas/:id` → `200 {deleted:\"NNN\"}` si se borró, `404 {error}` si no existía, `500 {error}` si petó. Forma idéntica al ya existente `DELETE /api/chats/:id`. El front consume; el back expone. Cada parte construye contra esta firma sin esperar a la otra.\n\n```plan\n{\n  \"resumen\": \"Borrado definitivo de una tarea desde su tarjeta (con confirmación), calcando el borrado de conversación ya existente; arrastra también el hilo propio (tarea-hilo) de la tarea si lo tiene.\",\n  \"partes\": [\n    {\"name\":\"back\",\"hace\":\"deleteTarea(root,id) en el store (borra el JSON y, si existe, su threadId via deleteChat) + endpoint DELETE /api/tareas/:id\",\"ficheros\":[\"scripts/lib/forge-store.js\",\"scripts/forge.js\"]},\n    {\"name\":\"front\",\"hace\":\"botón papelera 🗑 en renderTareaItem (oculto hasta rollover) + función deleteTarea(t) con confirm y repintado\",\"ficheros\":[\"public/forge/index.html\"]}\n  ],\n  \"contrato\": [\n    {\"entre\":[\"back\",\"front\"],\"interfaz\":\"DELETE /api/tareas/:id → 200 {deleted:id} | 404 {error} | 500 {error}\",\"acuerdo\":\"forma idéntica a DELETE /api/chats/:id; el back expone, el front consume; construyen en paralelo contra esta firma\"}\n  ]\n}\n```",
+  "fromChat": "038",
+  "createdAt": "2026-06-05T13:49:15.887Z",
+  "subtareas": [
+    {
+      "name": "back",
+      "alcance": {
+        "archivos": [
+          "scripts/lib/forge-store.js",
+          "scripts/forge.js"
+        ],
+        "frontera": "deleteTarea(root,id) en el store (borra el JSON y, si existe, su threadId via deleteChat) + endpoint DELETE /api/tareas/:id",
+        "noTocar": [
+          "public/forge/index.html"
+        ]
+      },
+      "contrato": [
+        {
+          "entre": [
+            "back",
+            "front"
+          ],
+          "interfaz": "DELETE /api/tareas/:id → 200 {deleted:id} | 404 {error} | 500 {error}",
+          "acuerdo": "forma idéntica a DELETE /api/chats/:id; el back expone, el front consume; construyen en paralelo contra esta firma"
+        }
+      ]
+    },
+    {
+      "name": "front",
+      "alcance": {
+        "archivos": [
+          "public/forge/index.html"
+        ],
+        "frontera": "botón papelera 🗑 en renderTareaItem (oculto hasta rollover) + función deleteTarea(t) con confirm y repintado",
+        "noTocar": [
+          "scripts/lib/forge-store.js",
+          "scripts/forge.js"
+        ]
+      },
+      "contrato": [
+        {
+          "entre": [
+            "back",
+            "front"
+          ],
+          "interfaz": "DELETE /api/tareas/:id → 200 {deleted:id} | 404 {error} | 500 {error}",
+          "acuerdo": "forma idéntica a DELETE /api/chats/:id; el back expone, el front consume; construyen en paralelo contra esta firma"
+        }
+      ]
+    }
+  ],
+  "plan": {
+    "version": 1,
+    "resumen": "Borrado definitivo de una tarea desde su tarjeta (con confirmación), calcando el borrado de conversación ya existente; arrastra también el hilo propio (tarea-hilo) de la tarea si lo tiene.",
+    "partes": [
+      {
+        "name": "back",
+        "hace": "deleteTarea(root,id) en el store (borra el JSON y, si existe, su threadId via deleteChat) + endpoint DELETE /api/tareas/:id",
+        "ficheros": [
+          "scripts/lib/forge-store.js",
+          "scripts/forge.js"
+        ]
+      },
+      {
+        "name": "front",
+        "hace": "botón papelera 🗑 en renderTareaItem (oculto hasta rollover) + función deleteTarea(t) con confirm y repintado",
+        "ficheros": [
+          "public/forge/index.html"
+        ]
+      }
+    ],
+    "contrato": [
+      {
+        "entre": [
+          "back",
+          "front"
+        ],
+        "interfaz": "DELETE /api/tareas/:id → 200 {deleted:id} | 404 {error} | 500 {error}",
+        "acuerdo": "forma idéntica a DELETE /api/chats/:id; el back expone, el front consume; construyen en paralelo contra esta firma"
+      }
+    ],
+    "aprobado": true,
+    "aprobadoAt": "2026-06-05T14:09:58.764Z"
+  },
+  "threadId": "039",
+  "editedAt": "2026-06-05T14:06:57.147Z",
+  "paralelizadoAt": "2026-06-05T18:41:39.216Z",
+  "testsPlan": {
+    "version": 1,
+    "tests": [
+      {
+        "ref": "general",
+        "nivel": "persistente",
+        "estado": "pasa",
+        "titulo": "Una tarea se puede borrar de extremo a extremo",
+        "dado": "una tarea existe en disco y aparece en la columna derecha",
+        "cuando": "se pulsa su papelera y se confirma",
+        "entonces": "el JSON desaparece del disco y la tarjeta desaparece de la columna",
+        "id": "T-14-01"
+      },
+      {
+        "ref": "back",
+        "nivel": "persistente",
+        "estado": "pasa",
+        "titulo": "el endpoint respeta el contrato compartido con DELETE /api/chats/:id",
+        "dado": "el contrato back↔front DELETE /api/tareas/:id → 200 {deleted:id} | 404 {error} | 500 {error}",
+        "cuando": "se compara con DELETE /api/chats/:id",
+        "entonces": "usa las mismas claves (deleted/error) y los mismos códigos, de modo que el front lo consume igual",
+        "id": "T-14-09"
+      }
+    ],
+    "aprobado": false,
+    "aprobadoAt": null,
+    "generado": false,
+    "generadoAt": null
+  },
+  "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t014-1780779649797",
+  "branch": "miguel/tarea-014-1780779649797",
+  "buildRepo": "C:\\Users\\TieBlumer\\Documents\\neblla",
+  "base": "0bf84ea5c4d22e8f9575c3f8a518b5a87ca4b84f",
+  "builtAt": "2026-06-06T21:00:51.664Z",
+  "fromMsg": 1,
+  "brought": true,
+  "broughtAt": "2026-06-06T21:25:04.877Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-06T21:28:12.571Z"
+}

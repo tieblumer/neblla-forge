@@ -21,11 +21,11 @@ import fs from 'fs';
 import path from 'path';
 
 export function chatsDir(root) {
-  return path.join(root, 'sprint', 'chats');
+  return path.join(root, 'forge', 'sprint', 'chats');
 }
 
 export function tareasDir(root) {
-  return path.join(root, 'sprint', 'tareas');
+  return path.join(root, 'forge', 'sprint', 'tareas');
 }
 
 // ── estado del ciclo (la forja) ──────────────────────────────────────────────
@@ -34,7 +34,7 @@ export function tareasDir(root) {
 // solo el disco. Si falta o está corrupto, se devuelve null (forge.js pone el
 // default y lo escribe).
 export function cyclePath(root) {
-  return path.join(root, 'sprint', 'cycle.json');
+  return path.join(root, 'forge', 'sprint', 'cycle.json');
 }
 
 export function readCycle(root) {
@@ -52,7 +52,7 @@ export function writeCycle(root, state) {
 // elección la pone el selector de la UI y vale para TODOS los personajes. Vacío o
 // corrupto → null (forge.js usa entonces el modelo por defecto del CLI).
 export function modelPath(root) {
-  return path.join(root, 'sprint', 'model.json');
+  return path.join(root, 'forge', 'sprint', 'model.json');
 }
 
 export function readModel(root) {
@@ -237,6 +237,150 @@ export function replaceMessageText(root, id, msgId, text) {
   });
 }
 
+// ── el vínculo conversación ↔ tarea (el "stub" de Aubé) ──────────────────────
+// Cuando se APRUEBA una tarea desde un mensaje de Aubé, ese mensaje no se borra:
+// se COLAPSA en un stub "[Tarea NNN creada: título]" que apunta a la tarea
+// (tareaRef) y guarda su plan original (stashed) para poder devolverlo. Click en
+// el stub → abre la tarea. Idempotente (no re-guarda stashed si ya lo está).
+export function stubMessageForTarea(root, chatId, msgId, { tareaId, title } = {}) {
+  return withChatLock(root, chatId, () => {
+    const chat = readChat(root, chatId);
+    if (!chat) return null;
+    const msg = (chat.messages || []).find((m) => m.id === Number(msgId));
+    if (!msg) return null;
+    if (msg.stashed == null) msg.stashed = msg.text;   // conserva el plan original
+    msg.tareaRef = tareaId;
+    msg.text = `[Tarea ${tareaId} creada: ${title || ('Tarea ' + tareaId)}]`;
+    writeChat(root, chat);
+    return msg;
+  });
+}
+
+// Adjunta a un mensaje el PLAN estructurado de Aubé (DETERMINISTA: viene del MCP
+// `proponer_plan`, no de parsear texto) y, opcional, reescribe su texto con el render
+// legible. `msg.plan` es la fuente canónica que /api/tareas lee sin parsear. Round-trip
+// acotado y seguro. Devuelve el mensaje, o null si no existe.
+export function setMessagePlan(root, chatId, msgId, { plan, text } = {}) {
+  return withChatLock(root, chatId, () => {
+    const chat = readChat(root, chatId);
+    if (!chat) return null;
+    const msg = (chat.messages || []).find((m) => m.id === Number(msgId));
+    if (!msg) return null;
+    if (plan && typeof plan === 'object') msg.plan = plan;
+    if (typeof text === 'string') msg.text = text;
+    delete msg.live;   // el plan ya llegó: deja de ser un latido
+    writeChat(root, chat);
+    return msg;
+  });
+}
+
+// Deshace el stub: devuelve el mensaje a su plan original (stashed) y le quita la
+// referencia a la tarea. Es lo que corre al BORRAR una tarea (el plan vuelve a su
+// conversación origen). Idempotente; null si el chat/mensaje no existe.
+export function restoreStubbedMessage(root, chatId, msgId) {
+  return withChatLock(root, chatId, () => {
+    const chat = readChat(root, chatId);
+    if (!chat) return null;
+    const msg = (chat.messages || []).find((m) => m.id === Number(msgId));
+    if (!msg) return null;
+    if (msg.stashed != null) msg.text = msg.stashed;
+    delete msg.stashed;
+    delete msg.tareaRef;
+    writeChat(root, chat);
+    return msg;
+  });
+}
+
+// Estampa el COSTE de un mensaje (la chapa $ de la UI). NO es una edición de
+// contenido: no toca `text` ni marca `edited`. Añade `runId` (el spawn que lo
+// produjo), `cost` ({ usd, usageFound }) y, opcional, `costPrimary` (solo UNO de
+// los mensajes de un run lo lleva → una sola chapa). Best-effort: idempotente,
+// devuelve null (sin lanzar) si el chat o el mensaje no existen.
+export function stampMessageCost(root, id, msgId, { runId, costUsd, usageFound, costPrimary } = {}) {
+  try {
+    return withChatLock(root, id, () => {
+      const chat = readChat(root, id);
+      if (!chat) return null;
+      const msg = (chat.messages || []).find((m) => m.id === Number(msgId));
+      if (!msg) return null;
+      if (runId !== undefined) msg.runId = runId;
+      msg.cost = { usd: (costUsd === undefined ? null : costUsd), usageFound: !!usageFound };
+      if (costPrimary) msg.costPrimary = true;
+      writeChat(root, chat);
+      return msg;
+    });
+  } catch {
+    return null;
+  }
+}
+
+// Marca/desmarca un mensaje como BUILD EN VIVO (Miguel/revisor construyendo). El
+// front pinta el botón "📸 Resumir" solo en los mensajes con `live:true`. Round-trip
+// acotado y seguro (solo voltea el flag). Se limpia cuando el build termina.
+export function setMessageLive(root, id, msgId, val) {
+  try {
+    return withChatLock(root, id, () => {
+      const chat = readChat(root, id);
+      if (!chat) return null;
+      const msg = (chat.messages || []).find((m) => m.id === Number(msgId));
+      if (!msg) return null;
+      if (val) msg.live = true; else delete msg.live;
+      writeChat(root, chat);
+      return msg;
+    });
+  } catch { return null; }
+}
+
+// Estampa el LATIDO de un mensaje vivo: su texto + los TIMESTAMPS (arranque y último
+// ping) para que el navegador calcule "hace Xs" EN VIVO (no un número congelado). El
+// front lee `liveStartedAt`/`livePingAt` y los tickea cada segundo. Round-trip acotado.
+export function setLiveBeat(root, id, msgId, { text, startedAt, pingAt } = {}) {
+  try {
+    return withChatLock(root, id, () => {
+      const chat = readChat(root, id);
+      if (!chat) return null;
+      const msg = (chat.messages || []).find((m) => m.id === Number(msgId));
+      if (!msg) return null;
+      if (typeof text === 'string') msg.text = text;
+      msg.live = true;
+      if (startedAt != null) msg.liveStartedAt = Number(startedAt);
+      if (pingAt != null) msg.livePingAt = Number(pingAt);
+      writeChat(root, chat);
+      return msg;
+    });
+  } catch { return null; }
+}
+
+// Barre TODOS los chats apagando los mensajes que quedaron marcados "vivo" sin un
+// proceso detrás (builds HUÉRFANOS: la máquina se reinició o el headless se cortó
+// sin disparar su `exit`). Por definición, al arrancar el servidor NO hay ninguno
+// corriendo, así que cualquier `live:true` es basura: lo apagamos y reescribimos su
+// texto con el aviso de interrupción. Devuelve [{ chatId, msgId, author }] de los que
+// tocó (el server los usa para marcar la tarea afectada). No lanza.
+export function sweepLiveBuilds(root) {
+  const tocados = [];
+  for (const meta of listChats(root)) {
+    try {
+      withChatLock(root, meta.id, () => {
+        const chat = readChat(root, meta.id);
+        if (!chat) return;
+        let cambiado = false;
+        for (const msg of (chat.messages || [])) {
+          if (!msg.live) continue;
+          delete msg.live;
+          delete msg.liveStartedAt;
+          delete msg.livePingAt;
+          msg.text = '⚠️ El trabajo se interrumpió (se reinició la máquina). Vuelve a lanzarlo.';
+          tocados.push({ chatId: chat.id, msgId: msg.id, author: msg.author });
+          cambiado = true;
+        }
+        if (cambiado) writeChat(root, chat);
+      });
+    } catch { /* un chat ilegible no debe tumbar el barrido */ }
+  }
+  return tocados;
+}
+
 // ── tareas (columna derecha) ─────────────────────────────────────────────────
 // Una tarea aprobada por Aubé vive en sprint/tareas/NNN.json, INDEPENDIENTE del
 // producto: la forge no toca project/ ni el BACKLOG. Esquema simple.
@@ -254,7 +398,7 @@ export function listTareas(root) {
     .sort((a, b) => (a.num || 0) - (b.num || 0));
 }
 
-export function createTarea(root, { title, body, fromChat, subtareas } = {}) {
+export function createTarea(root, { title, body, fromChat, fromMsg, subtareas, plan } = {}) {
   let files = [];
   try { files = fs.readdirSync(tareasDir(root)); } catch {}
   let max = 0;
@@ -269,14 +413,117 @@ export function createTarea(root, { title, body, fromChat, subtareas } = {}) {
     title: (title && String(title).trim()) || `Tarea ${id}`,
     body: String(body == null ? '' : body),
     fromChat: fromChat || null,
+    // fromMsg: el id del mensaje de Aubé (en `fromChat`) que esta tarea sustituyó
+    // por su stub "[Tarea NNN creada: …]". Al borrar la tarea, devolvemos ESE
+    // mensaje a su plan original (restoreStubbedMessage). null = nació sin origen.
+    fromMsg: (fromMsg == null ? null : Number(fromMsg)),
     createdAt: new Date().toISOString(),
   };
   // Si Aubé partió la tarea en carriles paralelos, se guardan aquí; el motor
   // (forge-estado.js) deriva de ellos el estado del padre. Sin partir → se omite
   // y el motor sintetiza la única subtarea `main` de alcance completo.
   if (Array.isArray(subtareas) && subtareas.length > 1) tarea.subtareas = subtareas;
+  // El PLAN estructurado de Aubé (resumen + partes + contrato). Nace SIN aprobar;
+  // se aprueba aparte (approveTareaPlan) antes de paralelizar/construir.
+  if (plan && typeof plan === 'object') tarea.plan = plan;
   atomicWrite(path.join(tareasDir(root), id + '.json'), JSON.stringify(tarea, null, 2) + '\n');
   return tarea;
+}
+
+// Guarda/reemplaza el PLAN estructurado de la tarea (de Aubé o editado a mano).
+// Lo deja SIN aprobar (un plan nuevo siempre vuelve a la cola de aprobación).
+// Devuelve la tarea, o null si no existe.
+export function setTareaPlan(root, id, plan) {
+  const tarea = readTarea(root, id);
+  if (!tarea) return null;
+  tarea.plan = (plan && typeof plan === 'object') ? { ...plan, aprobado: false, aprobadoAt: null } : null;
+  return writeTarea(root, tarea);
+}
+
+// Override MANUAL de la complejidad por Tie (manda sobre la de Aubé en el plan).
+// `nivel` vacío/null borra el override (vuelve a regir la de Aubé). Devuelve la tarea.
+export function setTareaComplejidad(root, id, nivel) {
+  const tarea = readTarea(root, id);
+  if (!tarea) return null;
+  const n = String(nivel == null ? '' : nivel).trim().toLowerCase();
+  if (n) tarea.complejidad = n; else delete tarea.complejidad;
+  return writeTarea(root, tarea);
+}
+
+// Marca el plan como APROBADO (la puerta antes de paralelizar). Idempotente.
+// Devuelve la tarea, o null si no existe / no tiene plan.
+export function approveTareaPlan(root, id) {
+  const tarea = readTarea(root, id);
+  if (!tarea || !tarea.plan) return null;
+  tarea.plan.aprobado = true;
+  tarea.plan.aprobadoAt = new Date().toISOString();
+  return writeTarea(root, tarea);
+}
+
+// Materializa las SUBTAREAS de la tarea (las que produce "Paralelizar" desde el
+// plan aprobado): array de {name, alcance, contrato}. Una lista vacía/nula borra el
+// troceo (vuelve a la `main` sintética). Devuelve la tarea, o null si no existe.
+export function setTareaSubtareas(root, id, subtareas) {
+  const tarea = readTarea(root, id);
+  if (!tarea) return null;
+  if (Array.isArray(subtareas) && subtareas.length > 1) tarea.subtareas = subtareas;
+  else delete tarea.subtareas;   // una sola pieza → main sintética (el motor la deriva)
+  // Sello de "paralelizado AHORA": el front compara este instante con plan.aprobadoAt
+  // para saber si la paralelización corresponde a la versión ACTUAL del plan (y así
+  // esconder el botón si ya está en sync, o mostrarlo si el plan cambió después).
+  tarea.paralelizadoAt = new Date().toISOString();
+  return writeTarea(root, tarea);
+}
+
+// Guarda/reemplaza el PLAN DE TESTS en papel de Ana Liz (Fase C). Lo deja SIN
+// aprobar (replanificar siempre vuelve a la cola). Devuelve la tarea, o null.
+export function setTareaTestsPlan(root, id, testsPlan) {
+  const tarea = readTarea(root, id);
+  if (!tarea) return null;
+  tarea.testsPlan = (testsPlan && typeof testsPlan === 'object')
+    ? { ...testsPlan, aprobado: false, aprobadoAt: null }
+    : null;
+  return writeTarea(root, tarea);
+}
+
+// Muta el plan de tests con una función pura `fn(testsPlanActual) → testsPlanNuevo`.
+// Lee la tarea, aplica fn sobre su `testsPlan` (o {} si no hay), guarda. Es el carril
+// común de las ediciones finas (patch/borrar/promover/cambiar-nivel/sellar/estado),
+// para no repetir el read-modify-write. Devuelve la tarea, o null si no existe.
+export function mutateTestsPlan(root, id, fn) {
+  const tarea = readTarea(root, id);
+  if (!tarea) return null;
+  const next = fn(tarea.testsPlan || { tests: [] }) || { tests: [] };
+  tarea.testsPlan = next;
+  return writeTarea(root, tarea);
+}
+
+// Borra una tarea de disco (DEFINITIVO). Devuelve true si existía y se borró. NO
+// toca su origen ni su hilo: eso lo orquesta el servidor (restaura el stub y borra
+// el tarea-hilo) antes de llamar aquí. Idempotente.
+export function deleteTarea(root, id) {
+  const p = tareaPath(root, id);
+  if (!p || !fs.existsSync(p)) return false;
+  fs.unlinkSync(p);
+  return true;
+}
+
+// Resuelve el LINK ORIGEN de una tarea (la cabecera "↰ viene de …"): de qué
+// conversación —o de qué tarea— nació. Se resuelve EN VIVO, así que renombrar la
+// fuente renombra el link y borrarla lo hace desaparecer (devuelve null):
+//   - fromChat es una conversación normal → { kind:'chat',  id, title }
+//   - fromChat es el HILO de otra tarea   → { kind:'tarea', id, title } (la tarea padre)
+//   - fromChat no existe / no hay origen  → null (el link se elimina y listo)
+export function resolveOrigen(root, tarea) {
+  if (!tarea || !tarea.fromChat) return null;
+  const chat = readChat(root, tarea.fromChat);
+  if (!chat) return null;                              // la fuente se borró → sin link
+  if (chat.tareaId) {                                  // la fuente es el hilo de otra tarea
+    const padre = readTarea(root, chat.tareaId);
+    if (!padre) return null;
+    return { kind: 'tarea', id: padre.id, title: padre.title || ('Tarea ' + padre.id) };
+  }
+  return { kind: 'chat', id: chat.id, title: chat.title || ('Conversación ' + chat.id) };
 }
 
 // ── la tarea como objeto vivo: leer / hilo propio / editar definición ────────
@@ -335,6 +582,18 @@ export function setTareaBuild(root, id, { worktree, branch, repo, base } = {}) {
   // a ⏳ cogida y no quede un ✓ mentiroso de un build viejo.
   delete tarea.brought; delete tarea.broughtAt;
   delete tarea.enMaster; delete tarea.enMasterAt; delete tarea.masterCommit;
+  delete tarea.miguelInterrumpido; delete tarea.interrumpidoAt;   // re-lanzar borra el "build interrumpido"
+  return writeTarea(root, tarea);
+}
+
+// Marca que el build de Miguel se INTERRUMPIÓ (huérfano: se cortó sin terminar). Bloquea
+// "Subir a master" hasta que se relance a Miguel (setTareaBuild lo limpia). Idempotente.
+export function markTareaInterrumpido(root, id) {
+  const tarea = readTarea(root, id);
+  if (!tarea) return null;
+  if (tarea.enMaster) return tarea;   // ya cerrada: un huérfano viejo no la reabre
+  tarea.miguelInterrumpido = true;
+  tarea.interrumpidoAt = new Date().toISOString();
   return writeTarea(root, tarea);
 }
 

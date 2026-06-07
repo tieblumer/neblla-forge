@@ -122,7 +122,7 @@ const PROFILE_CONFIG_FILE = path.join(REPO_ROOT, 'sandbox.config.json');
 // tokens) never leaks into the hermetic behavior diana.
 function profileConfigFile() {
   const root = sandboxRoot();
-  const def = path.join(REPO_ROOT, 'backbone', 'sandbox');
+  const def = path.join(REPO_ROOT, 'forge', 'backbone', 'sandbox');
   if (path.resolve(root) === path.resolve(def)) return PROFILE_CONFIG_FILE;
   return path.join(root, 'sandbox.config.json');
 }
@@ -438,7 +438,7 @@ async function williamChoice() {
 function williamPrompt() {
   return [
     'Eres William, un revisor senior del sandbox de Neblla. Mira las notas en',
-    'backbone/sandbox/notas/. Elige UNA nota y, SOLO si tienes algo realmente útil',
+    'forge/backbone/sandbox/notas/. Elige UNA nota y, SOLO si tienes algo realmente útil',
     'que aportar (una mejora o un problema), haz UNA observación; si no, quédate',
     'callado. Responde EXCLUSIVAMENTE con un JSON en una línea: {"note":"<id de la',
     'nota>","say":"<tu única observación, o cadena vacía para callar>"}. Nada más.',
@@ -784,7 +784,7 @@ function launchProgrammer(prog, noteId) {
 function programmerPrompt(noteId) {
   return [
     `Eres un programador del sandbox de Neblla. Tu nota es ${noteId}`,
-    `(backbone/sandbox/notas/${noteId}.md, una copia de solo-lectura sembrada en tu`,
+    `(forge/backbone/sandbox/notas/${noteId}.md, una copia de solo-lectura sembrada en tu`,
     'worktree). Lee su sección ## Pide y constrúyelo en tu worktree. Antes de darla por',
     'finalizada, mira si hay algo en ## Observaciones de William. Apunta tus',
     `aprendizajes/tips —una línea por aprendizaje— en el fichero .bitacora-${noteId}.txt`,
@@ -803,7 +803,7 @@ function programmerPrompt(noteId) {
 // which the heart drains back into the canonical note at harvest (drainBitacoraSidecar).
 export function seedNoteIntoWorktree(workdir, noteId) {
   const src = notePathFor(noteId);
-  const dst = path.join(workdir, 'backbone', 'sandbox', 'notas', String(noteId) + '.md');
+  const dst = path.join(workdir, 'forge', 'backbone', 'sandbox', 'notas', String(noteId) + '.md');
   fs.mkdirSync(path.dirname(dst), { recursive: true });
   fs.copyFileSync(src, dst);
 }
@@ -1035,7 +1035,7 @@ async function demoMain() {
   // user/test-provided NEBLLA_SANDBOX_DIR).
   const explicitDir = (process.env.NEBLLA_SANDBOX_DIR || '').trim();
   const usingDefaultDemoDir = !explicitDir;
-  const demoRoot = explicitDir || path.join(REPO_ROOT, 'backbone/sandbox/.demo');
+  const demoRoot = explicitDir || path.join(REPO_ROOT, 'forge/backbone/sandbox/.demo');
   setSandboxRoot(demoRoot);
 
   const root = sandboxRoot();

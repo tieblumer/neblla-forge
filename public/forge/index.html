@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Forge</title>
+<title>Neblla Forge</title>
 <link rel="icon" type="image/svg+xml" href="/forge/favicon.svg" />
 <style>
   :root {
@@ -35,7 +35,7 @@
   body.right-collapsed                    { grid-template-columns: 280px 1fr 44px; }
   body.left-collapsed.right-collapsed     { grid-template-columns: 44px 1fr 44px; }
 
-  .col { min-height: 0; height: 100%; display: flex; flex-direction: column; }
+  .col { min-height: 0; min-width: 0; height: 100%; display: flex; flex-direction: column; }
   .col-left   { grid-column: 1; grid-row: 2; background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; }
   .col-center { grid-column: 2; grid-row: 2; background: var(--bg); }
   .col-right  { grid-column: 3; grid-row: 2; background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; }
@@ -61,7 +61,47 @@
     overflow: visible;
   }
   .bar-left, .bar-right { display: flex; align-items: center; flex: 0 0 auto; }
-  .bar-left { flex-direction: column; align-items: flex-start; gap: 1px; }
+  /* indicador del uso de la ventana de 5h: etiqueta + barrita + % · tiempo restante */
+  .usage-chip { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 10px; padding: 3px 9px; margin-right: 8px;
+    font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; user-select: none; }
+  .usage-chip:hover { border-color: var(--secondary); }
+  .usage-chip .uc-lbl { color: var(--secondary); font-weight: 600; }
+  .usage-chip .uc-bar { width: 56px; height: 6px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+  .usage-chip .uc-fill { display: block; height: 100%; width: 0; background: var(--secondary); transition: width .3s; }
+  .usage-chip.warn .uc-fill { background: #e0a23a; }
+  .usage-chip.danger .uc-fill { background: #ff6b6b; }
+  .usage-chip.warn .uc-meta { color: #e0a23a; }
+  .usage-chip.danger .uc-meta { color: #ff6b6b; }
+  .usage-chip.off { cursor: default; }
+  .usage-chip.off:hover { border-color: var(--border); }
+  /* lucecita de estado de la forja: verde encendida / ámbar apagándose / gris-rojo desconectada */
+  .forge-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600;
+    border: 1px solid var(--border); border-radius: 10px; padding: 3px 9px; margin-right: 8px;
+    white-space: nowrap; user-select: none; font-variant-numeric: tabular-nums; }
+  .forge-status.on { color: #3ad07a; border-color: rgba(58,208,122,.4); }
+  .forge-status.draining { color: #e0a23a; border-color: rgba(224,162,58,.5); }
+  .forge-status.down { color: #ff6b6b; border-color: rgba(255,107,107,.5); }
+  /* modal de uso (desglose de las ventanas) */
+  .usage-modal { display: none; position: fixed; inset: 0; z-index: 1200; padding: 24px;
+    background: rgba(0,0,0,.7); align-items: center; justify-content: center; }
+  .usage-box { background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,.6); width: min(460px, 94vw); padding: 20px 24px; }
+  .usage-box h3 { margin: 0 0 14px; font-size: 16px; position: relative; padding-right: 28px; }
+  .usage-box .um-x { position: absolute; top: -4px; right: -4px; background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 8px; cursor: pointer; padding: 2px 9px; }
+  .usage-box .um-x:hover { color: var(--accent); border-color: var(--accent); }
+  .um-win { margin: 0 0 14px; }
+  .um-win-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; margin-bottom: 5px; }
+  .um-win-name { font-weight: 700; color: #fff; }
+  .um-win-pct { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .um-win-bar { height: 8px; background: var(--panel-2); border-radius: 5px; overflow: hidden; }
+  .um-win-fill { display: block; height: 100%; background: var(--secondary); }
+  .um-win-fill.warn { background: #e0a23a; }
+  .um-win-fill.danger { background: #ff6b6b; }
+  .um-win-sub { font-size: 11px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .um-stale { font-size: 11px; color: #e0a23a; margin-top: 8px; }
+  .bar-left { flex-direction: row; align-items: center; gap: 8px; }
   .bar-center { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
 
   /* IZQUIERDA — chip del objetivo + rama debajo */
@@ -78,7 +118,7 @@
   /* BLOQUEADO: fuera de "Nuevo ciclo" (fase Spike) el objetivo no se puede cambiar. */
   .target-chip:disabled { cursor: not-allowed; opacity: .55; filter: none; }
   .target-chip:disabled:hover { filter: none; }
-  .target-branch { font-size: 11px; color: var(--muted); padding-left: 4px; }
+  .target-branch { font-size: 11px; color: var(--muted); }
 
   /* CENTRO — el carril del viaje */
   .rail { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; min-width: 0; }
@@ -94,15 +134,16 @@
   }
   .bc-sep { color: var(--border); font-size: 14px; padding: 0 2px; user-select: none; }
 
-  /* la PUERTA-parada de entrada ("Nuevo ciclo"): NO es una fase ni un botón de
-     acción; es una parada con ajustes dentro. Borde punteado cálido + engranaje. */
+  /* la PUERTA-parada de entrada ("Nuevo ciclo"): una parada con ajustes dentro.
+     Normalizada al MISMO look que las fases de la miga (.bc-phase): texto apagado,
+     borde transparente, mismo tamaño/radio. Solo el engranaje la distingue. */
   .gate { position: relative; }
   .gate-stop {
-    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
-    background: rgba(201,145,46,.10); color: var(--gate);
-    border: 1px dashed var(--gate); border-radius: 999px; padding: 4px 12px;
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    background: transparent; color: var(--muted);
+    border: 1px solid transparent; border-radius: 7px; padding: 3px 10px;
   }
-  .gate-stop:hover { background: rgba(201,145,46,.20); }
+  .gate-stop:hover { color: var(--text); border-color: var(--border); }
   .gate-pop {
     display: none; position: absolute; top: calc(100% + 8px); z-index: 40;
     width: 260px; padding: 14px; background: var(--panel-2);
@@ -130,6 +171,25 @@
     background: #b3162a; color: #fff; border: 0; border-radius: 8px; padding: 8px 10px;
   }
   .gate-danger:hover { filter: brightness(1.1); }
+  /* ESTADO "Nuevo ciclo": panel que cubre el centro (en vez del viejo popover) */
+  .col-center { position: relative; }
+  .nc-view { position: absolute; inset: 0; z-index: 30; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .nc-card { width: min(540px, 94%); background: var(--panel); border: 1px solid var(--gate);
+    border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.5); padding: 24px 28px; }
+  .nc-card h2 { margin: 0 0 6px; font-size: 20px; }
+  .nc-card p { margin: 0 0 18px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .nc-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .nc-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--secondary); width: 64px; }
+  .nc-card input.gate-branch { flex: 1 1 auto; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; font: inherit; outline: none; }
+  .nc-card input.gate-branch:focus { border-color: var(--secondary); }
+  .nc-actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
+  .nc-actions .gate-danger { width: auto; }
+  .nc-cancel { font: inherit; font-size: 12px; cursor: pointer; background: transparent;
+    color: var(--secondary); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; }
+  .nc-cancel:hover { border-color: var(--secondary); }
+  .gate-stop.active { color: #fff; border-color: var(--gate); background: var(--gate); }
 
   /* pie del carril: el combo de modelos, abajo-derecha pero DENTRO del carril */
   .rail-foot { display: flex; align-items: center; gap: 6px; align-self: flex-end; }
@@ -188,17 +248,18 @@
   .new-btn:hover { filter: brightness(1.08); }
   .new-btn:active { transform: translateY(1px); }
 
-  .chat-list { list-style: none; margin: 0; padding: 4px 8px 16px; }
+  /* lista de conversaciones COMPACTA estilo Slack: una línea por chat, solo el título */
+  .chat-list { list-style: none; margin: 0; padding: 4px 6px 16px; }
   .chat-item {
-    padding: 10px 12px; border-radius: 8px; cursor: pointer; margin-bottom: 2px;
+    padding: 4px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 0;
     border: 1px solid transparent;
   }
   .chat-item:hover { background: var(--panel-2); }
   .chat-item.active { background: var(--panel-2); border-color: var(--border); }
-  .chat-item .row { display: flex; align-items: flex-start; gap: 8px; }
+  .chat-item .row { display: flex; align-items: center; gap: 6px; }
   .chat-item .body { flex: 1 1 auto; min-width: 0; }
-  .chat-item .title { font-weight: 500; }
-  .chat-item .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .chat-item .title { font-weight: 400; font-size: 13px; line-height: 1.5;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* botón de borrar (tarea #001): oculto hasta que el ratón pasa por la fila */
   .chat-del {
     flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
@@ -210,7 +271,12 @@
   .empty { color: var(--muted); padding: 24px 16px; text-align: center; font-size: 13px; }
 
   /* CENTRO: hilo arriba (scroll), compositor abajo */
-  .thread { flex: 1 1 auto; overflow-y: auto; padding: 20px 24px; }
+  /* el carril central que scrollea: contiene la ficha de la tarea + el hilo, así
+     bajan JUNTOS (la ficha no se queda fija ni roba sitio al hilo). */
+  /* el carril central recorta en horizontal: un mensaje ancho NO desplaza la sesión;
+     el contenido ancho (un bloque de código) scrollea DENTRO de su propio mensaje. */
+  .center-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+  .thread { padding: 20px 24px; }
   .thread .placeholder { color: var(--muted); padding: 24px 0; }
 
   /* árbol de mensajes (estilo reddit) */
@@ -228,31 +294,258 @@
     display: block; max-width: 220px; max-height: 160px; margin: 4px 0;
     border-radius: 8px; border: 1px solid var(--border); cursor: zoom-in;
   }
+  /* markdown renderizado dentro de una burbuja / ficha (motor mdToFragment) */
+  .md-rendered { white-space: normal; }
+  .md-rendered > :first-child { margin-top: 0; }
+  .md-rendered > :last-child { margin-bottom: 0; }
+  .md-rendered p { margin: 6px 0; white-space: pre-wrap; }
+  .md-rendered h1, .md-rendered h2, .md-rendered h3,
+  .md-rendered h4, .md-rendered h5, .md-rendered h6 { margin: 10px 0 6px; line-height: 1.25; font-weight: 700; }
+  .md-rendered h1 { font-size: 1.32em; }
+  .md-rendered h2 { font-size: 1.18em; }
+  .md-rendered h3 { font-size: 1.07em; }
+  .md-rendered h4, .md-rendered h5, .md-rendered h6 { font-size: 1em; }
+  .md-rendered ul, .md-rendered ol { margin: 6px 0; padding-left: 22px; }
+  .md-rendered li { margin: 2px 0; }
+  .md-rendered code { background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0 4px; font-size: .92em; font-variant-ligatures: none; }
+  .md-rendered pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; overflow-x: auto; max-width: 100%; margin: 8px 0; }
+  .md-rendered { overflow-wrap: anywhere; }   /* parte palabras larguísimas (URLs/paths) */
+  .md-rendered pre code { background: none; border: none; padding: 0; }
+  .md-rendered blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--border); color: var(--muted); }
+  .md-rendered a { color: var(--accent); text-decoration: underline; }
+  .md-rendered hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+  .md-rendered strong { font-weight: 700; }
+  .md-rendered em { font-style: italic; }
   .lightbox {
     display: none; position: fixed; inset: 0; z-index: 1000; padding: 24px;
     background: rgba(0,0,0,.82); align-items: center; justify-content: center; cursor: zoom-out;
   }
   .lightbox img { max-width: 95vw; max-height: 95vh; border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.6); }
+  /* chapa de coste $ pegada a la burbuja */
+  .cost-chip {
+    display: inline-block; margin: 2px 0 0 2px; padding: 1px 7px; font-size: 11px;
+    font-variant-numeric: tabular-nums; color: var(--muted); background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 10px; cursor: pointer; user-select: none;
+  }
+  .cost-chip:hover { color: var(--accent); border-color: var(--accent); }
+  /* botón "📸 Resumir" en el mensaje de un build en vivo (resumen a demanda) */
+  .resume-chip {
+    display: inline-block; margin: 2px 0 0 6px; padding: 1px 9px; font: inherit; font-size: 11px;
+    color: var(--secondary); background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; cursor: pointer; user-select: none;
+  }
+  .resume-chip:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+  .resume-chip:disabled { opacity: .55; cursor: progress; }
+  /* ticker en vivo del build: cuenta los segundos en el navegador */
+  .live-ticker { margin: 3px 0 0 2px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .live-ticker.stale { color: #e0a23a; font-weight: 600; }
+  /* modal de desglose de coste */
+  .cost-modal {
+    display: none; position: fixed; inset: 0; z-index: 1100; padding: 24px;
+    background: rgba(0,0,0,.82); align-items: center; justify-content: center;
+  }
+  .cost-box {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,.6); cursor: default;
+    width: min(1200px, 94vw); max-height: 90vh; overflow-y: auto; padding: 20px 24px;
+  }
+  .cost-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; position: relative; padding-right: 28px; }
+  .cost-total { font-size: 24px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .cost-sub { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .cost-x { position: absolute; top: -4px; right: -4px; background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 8px; cursor: pointer; padding: 2px 8px; }
+  .cost-x:hover { color: var(--accent); border-color: var(--accent); }
+  .cost-loading { padding: 24px 0; color: var(--muted); font-size: 13px; }
+  .cost-list { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .cost-req { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--panel-2); }
+  .cost-req.warn { border-color: #b58900; }
+  .cost-req-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+  .cost-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; }
+  .cost-price { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
+  .cost-req-toks { margin-top: 5px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .cost-input { margin-top: 6px; font-size: 11px; }
+  .cost-input summary { cursor: pointer; color: var(--muted); }
+  .cost-input pre { white-space: pre-wrap; word-break: break-word;
+    margin: 6px 0 0; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font-size: 11px; }
+  /* 👥 Equipo: pestaña de perfiles a pantalla completa (overlay) */
+  .team-modal {
+    display: none; position: fixed; inset: 0; z-index: 1150; padding: 16px;
+    background: rgba(0,0,0,.78); overflow-y: auto;
+  }
+  .team-box {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: 0 8px 40px rgba(0,0,0,.6);
+    width: 100%; max-width: none; margin: 0 auto; padding: 20px 24px; box-sizing: border-box;
+  }
+  .team-head { display: flex; align-items: baseline; gap: 12px; position: relative; padding-right: 32px; margin-bottom: 4px; }
+  .team-head h2 { font-size: 20px; margin: 0; }
+  .team-head .team-sub { font-size: 12px; color: var(--muted); }
+  .team-x { position: absolute; top: -6px; right: -6px; background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 8px; cursor: pointer; padding: 3px 10px; font-size: 14px; }
+  .team-x:hover { color: var(--accent); border-color: var(--accent); }
+  /* panorámico: rejilla que aprovecha TODO el ancho — tantas columnas como quepan (≥330px). */
+  .team-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 14px; margin-top: 16px; align-items: start; }
+  .team-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; background: var(--panel-2); }
+  .team-card .tc-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .team-card .tc-name { font-size: 15px; font-weight: 700; }
+  .team-card .tc-slug { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .team-card .tc-desc { margin: 10px 0 0; font-size: 13px; color: var(--text); }
+  .team-card .tc-desc.md-rendered { line-height: 1.45; }
+  /* clic en la descripción / el bloque de permisos = editar (sin botón) */
+  .team-card .tc-clickable { cursor: pointer; border-radius: 8px; }
+  .team-card .tc-desc.tc-clickable { padding: 8px 10px; margin: 8px -10px 0; transition: background .12s; }
+  .team-card .tc-desc.tc-clickable:hover { background: var(--bg); }
+  .team-card .tc-edit { width: 100%; box-sizing: border-box; min-height: 240px; resize: vertical;
+    font: inherit; font-size: 13px; line-height: 1.45; padding: 10px 12px; margin-top: 10px;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; outline: none; }
+  .team-card .tc-edit:focus { border-color: var(--secondary); }
+  .team-card .tc-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  /* secciones apiladas: etiqueta blanca arriba, control debajo (modelo y permisos igual) */
+  .team-card .tc-sec { margin-top: 13px; }
+  .team-card .tc-sec-lbl { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--secondary); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .team-card .tc-sec-ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .team-card select.tc-model { font: inherit; font-size: 12px; padding: 5px 9px;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; }
+  .team-card .tc-model-hint { font-size: 11px; color: var(--muted); }
+  .team-card .tc-perm { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; }
+  .team-card .tc-perm:hover { border-color: var(--secondary); }
+  .team-card .tc-perm-line { font-size: 13px; margin: 3px 0; color: var(--text); }
+  .team-card .tc-perm-k { font-weight: 700; color: #fff; }
+  .team-btn { font: inherit; font-size: 12px; cursor: pointer; padding: 5px 12px; border-radius: 7px;
+    background: transparent; color: var(--secondary); border: 1px solid var(--border); }
+  .team-btn:hover { border-color: var(--secondary); }
+  .team-btn.primary { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .team-btn.busy { opacity: .55; cursor: progress; }
+  .tc-saved { font-size: 11px; color: #51cf66; opacity: 0; transition: opacity .2s; text-transform: none; letter-spacing: 0; }
+  .tc-saved.show { opacity: 1; }
+  /* modal de permisos (sub-overlay por encima del de Equipo) */
+  .perm-modal { position: fixed; inset: 0; z-index: 1200; padding: 24px;
+    background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; overflow-y: auto; }
+  .perm-box { background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,.6); width: min(520px, 94vw);
+    max-height: 90vh; overflow-y: auto; padding: 18px 22px; }
+  .perm-box h3 { margin: 0 0 12px; font-size: 16px; }
+  .perm-sec { margin: 0 0 14px; }
+  .perm-sec-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #fff; margin-bottom: 6px; }
+  .perm-sec-hint { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .perm-sec-body { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .perm-opt { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
+  .perm-opt code { background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  .perm-opt .perm-desc { color: var(--muted); font-size: 12px; }
+  .perm-ask { margin: 4px 0 14px; font-size: 13px; }
+  .perm-acts { display: flex; gap: 10px; margin-top: 6px; }
   /* F9b: definición FIJA de la tarea, anclada arriba del hilo */
   .tarea-def {
     flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--panel);
-    padding: 14px 24px; max-height: 40vh; overflow-y: auto;
+    padding: 14px 24px;   /* sin max-height/scroll interno: la ficha se ve entera, como un mensaje */
   }
   .tarea-def .td-eyebrow { font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  /* link origen: "↰ viene de …" — la cabecera con la que empieza la tarea */
+  .tarea-def .td-origen { font-size: 12px; margin-bottom: 6px; }
+  .tarea-def .td-origen a { color: var(--muted); cursor: pointer; border-bottom: 1px dotted var(--muted); }
+  .tarea-def .td-origen a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  /* mensaje-stub de tarea aprobada: el plan salió, esto es un LINK a la tarea */
+  .bubble.tarea-link-msg { cursor: pointer; border: 1px dashed var(--accent);
+    color: var(--accent); font-weight: 600; background: rgba(255,0,102,.06); }
+  .bubble.tarea-link-msg:hover { background: rgba(255,0,102,.12); }
+  /* PREGUNTA de un agente esperando respuesta */
+  .bubble.pregunta { border-left: 3px solid #e0a23a; }
+  .bubble.pregunta-pendiente { background: rgba(224,162,58,.10); border-color: #e0a23a; }
+  .answer-box { margin: 6px 0 0 12px; display: flex; flex-direction: column; gap: 6px; max-width: 70%; }
+  .answer-input {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid #e0a23a;
+    border-radius: 8px; padding: 8px 10px; font: inherit; outline: none; min-height: 54px; resize: vertical;
+  }
+  .answer-box .td-btn { align-self: flex-start; }
+  /* aviso global de preguntas esperando (arriba del hilo) */
+  .pregunta-banner {
+    background: rgba(224,162,58,.16); border: 1px solid #e0a23a; color: var(--text);
+    border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
   .tarea-def h2 { margin: 4px 0 6px; font-size: 16px; }
   .tarea-def .td-body { white-space: pre-wrap; color: var(--text); font-size: 13px; }
-  .tarea-def .td-acts { display: flex; gap: 8px; margin-top: 10px; }
-  .tarea-def .td-btn {
+  .td-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .td-btn {
     font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
     border: 1px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 4px 12px;
   }
-  .tarea-def .td-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  .tarea-def .td-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .td-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .td-btn:disabled { opacity: .5; cursor: not-allowed; }
+  /* el PASO NATURAL que toca: resaltado en rosa (magenta de marca) */
+  .td-btn.td-next { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .td-btn.td-next:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
+  /* barra FIJA de acciones de la tarea: vive en el composer, encima del input, y
+     NO se va con el scroll del hilo. Crece hacia arriba si hay muchos botones. */
+  .tarea-acts-bar { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .tarea-acts-bar .td-acts { margin-top: 0; }
   .tarea-def input.td-edit, .tarea-def textarea.td-edit {
     width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 8px 10px; font: inherit; outline: none; margin-bottom: 8px;
   }
   .tarea-def textarea.td-edit { min-height: 90px; resize: vertical; }
+  /* el PLAN estructurado de Aubé (resumen + partes + contrato) */
+  .td-plan { margin: 10px 0 0; border-top: 1px dashed var(--border); padding-top: 10px; }
+  .td-plan .tp-h { font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin: 8px 0 4px; }
+  .td-plan .tp-resumen { font-size: 13px; color: var(--text); }
+  .td-plan .tp-parte { font-size: 12.5px; margin: 3px 0; padding-left: 10px; border-left: 2px solid var(--border); }
+  .td-plan .tp-parte b { color: var(--accent); }
+  .td-plan .tp-files { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .td-plan .tp-contrato { font-size: 12.5px; margin: 3px 0; padding-left: 10px; border-left: 2px solid var(--accent); }
+  .td-plan .tp-contrato .tp-iface { font-family: ui-monospace, monospace; color: var(--text); }
+  .td-plan .tp-estado { font-size: 11px; font-weight: 700; margin-top: 8px; }
+  .td-plan .tp-aprobado { color: #36c08a; }
+  .td-plan .tp-pendiente { color: var(--muted); }
+  .td-plan .tp-motivos { color: #d98b5f; font-size: 12px; margin-top: 4px; }
+  /* estructura: subtareas con su alcance + tests colgando (el dibujo de Tie) */
+  .td-struct { margin: 10px 0 0; border-top: 1px dashed var(--border); padding-top: 10px; }
+  .td-struct .st-h { font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin: 6px 0 3px; }
+  .td-struct .st-sub { margin: 10px 0 2px; }
+  .td-struct .st-name { font-size: 13px; font-weight: 700; color: var(--text); }
+  .td-struct .st-alcance { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 14px; }
+  .td-struct .st-tests { margin: 2px 0 0 14px; }
+  .td-struct .st-test { font-size: 12.5px; color: var(--text); padding: 2px 4px; border-radius: 5px; }
+  .td-struct .st-test b { color: var(--accent); font-weight: 600; }
+  .td-struct .st-clickable { cursor: pointer; }
+  .td-struct .st-clickable:hover { background: var(--panel-2); }
+  .td-struct .st-empty { font-size: 12px; color: var(--muted); font-style: italic; margin-left: 14px; }
+  .td-struct .st-nivel { font-size: 11px; cursor: help; }
+  .td-struct .st-perm { color: #36c08a; }   /* persistente: se queda */
+  .td-struct .st-impl { color: var(--muted); }  /* temporal: efímero */
+  .td-struct .st-estado { font-size: 12px; display: inline-block; width: 15px; text-align: center; }
+  .td-struct .st-est-pasa { color: #36c08a; }
+  .td-struct .st-est-falla { color: #ff6b6b; }
+  .td-struct .st-est-ejecutando { color: #e0a23a; }
+  /* fila de COMPLEJIDAD: etiqueta + segmentado fácil/mediana/compleja (override de Tie) */
+  .td-complej { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; flex-wrap: wrap; }
+  .td-complej .tc-lbl { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--secondary); }
+  .td-complej .tc-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .td-complej .tc-seg button { font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    background: transparent; color: var(--muted); border: 0; border-right: 1px solid var(--border); padding: 4px 12px; }
+  .td-complej .tc-seg button:last-child { border-right: 0; }
+  .td-complej .tc-seg button.active { background: var(--secondary); color: #fff; }
+  .td-complej .tc-origen { font-size: 11px; color: var(--muted); }
+  /* botón "Añadir test" a mano (cabecera de la estructura de tests) */
+  .td-struct .st-add { font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; margin-left: 8px;
+    background: transparent; color: var(--secondary); border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; }
+  .td-struct .st-add:hover { border-color: var(--secondary); color: var(--text); }
+  /* botón "Completar" (el gate) — destacado en verde */
+  /* modal de edición de un test (reusa .perm-modal/.perm-box) */
+  .tm-field { margin: 0 0 10px; }
+  .tm-field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--secondary); margin-bottom: 4px; }
+  .tm-in { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 7px 9px;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; outline: none; }
+  textarea.tm-in { min-height: 52px; resize: vertical; }
+  .tm-in:focus { border-color: var(--secondary); }
+  .tm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+  .tm-row .tm-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--secondary); }
+  .tm-sel { font: inherit; font-size: 12px; padding: 5px 8px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px; cursor: pointer; }
+  .team-btn.tm-del { color: #ff6b6b; border-color: transparent; margin-left: auto; }
+  .team-btn.tm-del:hover { border-color: #ff6b6b; }
   /* F22 — el mensaje SELECCIONADO es el REY: se ve muy marcado (lo más
      importante de la pantalla). Define sobre qué actúan las herramientas. */
   .node.selected > .bubble {
@@ -344,8 +637,13 @@
   .tarea-list { list-style: none; margin: 0; padding: 4px 8px 16px; }
   /* cabecera de cada cajón (Revisar / En curso / Por hacer / Terminadas) */
   .tarea-grupo { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em;
-    text-transform: uppercase; padding: 12px 6px 4px; }
+    text-transform: uppercase; padding: 12px 6px 4px; cursor: pointer; user-select: none;
+    display: flex; align-items: center; gap: 6px; }
+  .tarea-grupo:hover { color: var(--secondary); }
   .tarea-grupo:first-child { padding-top: 4px; }
+  .tarea-grupo .tg-arrow { font-size: 9px; width: 9px; }
+  .tarea-grupo .tg-label { flex: 1 1 auto; }
+  .tarea-grupo .tg-count { font-weight: 600; opacity: .7; }
   .tarea-item {
     padding: 8px 10px; border-radius: 8px; margin-bottom: 4px; cursor: pointer;
     border: 1px solid var(--border); background: var(--panel-2);
@@ -359,6 +657,14 @@
   .tarea-ico.verde { color: #2ecc71; }   /* ✓ en master = cierre feliz */
   .tarea-item .title { font-weight: 500; flex: 1 1 auto; min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* borrar tarea: oculto hasta el hover de la fila (como .chat-del) */
+  .tarea-del {
+    flex: 0 0 auto; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+    background: transparent; color: var(--muted); border: 1px solid transparent;
+    border-radius: 6px; padding: 2px 6px; opacity: 0; transition: opacity .12s ease;
+  }
+  .tarea-item:hover .tarea-del, .tarea-item.active .tarea-del { opacity: 1; }
+  .tarea-del:hover { color: #ff6b6b; border-color: #ff6b6b; }
   /* barrita clicable que despliega el contenedor de subtareas */
   .tarea-bar { margin-top: 7px; height: 5px; border-radius: 3px; background: var(--border);
     cursor: pointer; position: relative; overflow: hidden; }
@@ -420,23 +726,10 @@
         <!-- únicos botones del carril: Retroceder / Avanzar (SOFT, no destruyen).
              ◀ abre el carril; el orden del viaje es: ◀ ⚙ Nuevo ciclo › Spike › … › Cierre ▶ -->
         <button class="tp-btn" id="btnBack" title="Retroceder a la fase anterior (corregir el rumbo)">◀</button>
-        <!-- puerta de ENTRADA: una parada con ajustes (NO un botón de acción).
-             Va ENTRE la flecha izquierda y Spike (primera parada del carril). -->
+        <!-- "Nuevo ciclo" ya NO es un popover: es un ESTADO. Esta parada lo ACTIVA y
+             su contenido (objetivo + rama + empezar) se ve en el centro (#nuevoCicloView). -->
         <div class="gate" id="gateNew">
-          <button class="gate-stop" id="gateNewBtn" title="Abrir los ajustes del ciclo nuevo">⚙ Nuevo ciclo</button>
-          <div class="gate-pop" id="popNew">
-            <h4>Nuevo ciclo</h4>
-            <p>Arranca un ciclo limpio. Define sobre qué trabajar y con qué rama.</p>
-            <div class="gate-row">
-              <span class="rf-lbl">Objetivo</span>
-              <div class="gate-seg" id="newTargetSeg">
-                <button data-target="forge">forge</button>
-                <button data-target="project">producto</button>
-              </div>
-            </div>
-            <input class="gate-branch" id="newBranch" placeholder="nombre de rama (ej. ciclo/qa-barra)" />
-            <button class="gate-danger" id="newStart" title="Borra el taller (conversaciones) y exige el producto limpio">⚠ Empezar ciclo — borra el taller</button>
-          </div>
+          <button class="gate-stop" id="gateNewBtn" title="Entrar en el estado 'Nuevo ciclo' (objetivo + rama + empezar)">⚙ Nuevo ciclo</button>
         </div>
         <span class="rail-sep">›</span>
         <div class="breadcrumb" id="breadcrumb"></div>
@@ -444,15 +737,14 @@
         <!-- "Cierre" ya NO es una puerta de salida: es la última fase del recorrido
              (Spike › … › QA › Cierre), se navega con las flechas como las demás. -->
       </div>
-      <!-- pie del carril: el combo de modelos, abajo-derecha pero dentro del carril -->
-      <div class="rail-foot">
-        <span class="rf-lbl">Modelo</span>
-        <select class="model-picker" id="modelPicker" title="Modelo de Claude para TODOS los personajes (Iris, Stevens, Miyagi, la pareja, William, Aubé, Anselmo, la varita)"></select>
-      </div>
     </div>
 
     <!-- DERECHA: los mandos que no son el viaje -->
     <div class="bar-right">
+      <span class="forge-status on" id="forgeStatus" title="Estado de la forja y nº de claudes activos">🟢 encendida</span>
+      <span class="usage-chip" id="usageChip" title="Uso de la ventana de 5h de tu suscripción">5h —</span>
+      <button class="tp-btn" id="btnTeam" title="Ver y editar los perfiles del equipo (descripción y modelo de cada empleado)">👥 Equipo</button>
+      <button class="tp-btn" id="btnRestart" title="Apagado ordenado: deja de aceptar trabajo nuevo, espera a que los claudes terminen y queda lista para reinicio manual">⟳ Schedule restart</button>
       <button class="tp-btn" id="btnPause" title="Pausar / reanudar el trabajo de la fase actual">⏸ Pausar</button>
     </div>
   </header>
@@ -469,18 +761,47 @@
 
   <!-- CENTRO: hilo + compositor -->
   <main class="col col-center">
+    <!-- ESTADO "Nuevo ciclo": panel que cubre el centro mientras estás en él -->
+    <div class="nc-view" id="nuevoCicloView" style="display:none">
+      <div class="nc-card">
+        <h2>⚙ Nuevo ciclo</h2>
+        <p>Arranca un ciclo limpio. Define sobre qué trabajar y con qué rama; al empezar se borra el taller (las conversaciones) y se abre el backlog.</p>
+        <div class="nc-row">
+          <span class="nc-lbl">Objetivo</span>
+          <div class="gate-seg" id="newTargetSeg">
+            <button data-target="forge">forge</button>
+            <button data-target="project">producto</button>
+          </div>
+        </div>
+        <div class="nc-row">
+          <span class="nc-lbl">Rama</span>
+          <input class="gate-branch" id="newBranch" placeholder="nombre de rama (ej. ciclo/qa-barra)" />
+        </div>
+        <div class="nc-actions">
+          <button class="gate-danger" id="newStart" title="Borra el taller (conversaciones) y exige el producto limpio">⚠ Empezar ciclo — borra el taller</button>
+          <button class="nc-cancel" id="newCancel">Cancelar</button>
+        </div>
+      </div>
+    </div>
     <div class="col-head" id="centerHead">
       <span class="head-title-wrap">
         <span id="chatTitle" class="chat-title" title="Clic para editar el nombre">Chat</span>
         <button class="wand-btn" id="btnWand" title="Generar un nombre automático" disabled>✦</button>
       </span>
     </div>
-    <!-- F9b: bloque FIJO con la definición de la tarea (solo al abrir una tarea) -->
-    <div class="tarea-def" id="tareaDef" style="display:none"></div>
-    <div class="thread" id="thread">
-      <div class="placeholder">Crea o elige una conversación a la izquierda.</div>
+    <!-- la ficha de la tarea + el hilo comparten UN solo scroll: la ficha baja como
+         un mensaje más en vez de quedarse fija arriba robándole sitio al hilo. -->
+    <div class="center-scroll" id="centerScroll">
+      <!-- F9b: la definición de la tarea (solo al abrir una tarea) -->
+      <div class="tarea-def" id="tareaDef" style="display:none"></div>
+      <div class="thread" id="thread">
+        <div class="placeholder">Crea o elige una conversación a la izquierda.</div>
+      </div>
     </div>
     <div class="composer">
+      <!-- barra FIJA con las acciones de la tarea (Aprobar/Ejecutar/Probar/Completar/
+           Subir a master…): siempre a la vista encima del input, no se va con el scroll. -->
+      <div class="tarea-acts-bar" id="tareaActsBar" style="display:none"></div>
       <!-- F22: qué mensaje es el rey + sus acciones + el scope universal -->
       <div class="selection" id="selection">
         <span class="sel-info" id="selInfo"></span>
@@ -505,6 +826,10 @@
         <button class="tool" id="btnDiscutir" disabled title="Romina o Ariel salta con un lado (al azar); vuelve a pulsar y salta el otro con el lado contrario">🙎‍♂️🙎‍♀️ Discutir</button>
         <button class="tool" id="btnResumir" disabled title="Anselmo resume el hilo (su nota se puede compactar)">📝 Resumir</button>
         <button class="tool" id="btnTarea" disabled title="Aubé baja el hilo a una tarea">❎ Crear tarea</button>
+        <!-- SOLO dentro de una tarea: Ana Liz define los tests (en papel) y luego los escribe (código) -->
+        <button class="tool tool-tarea" id="btnDefinirTests" disabled title="Ana Liz define los tests en papel (dado/cuando/entonces). Ciega al código; recibe el contexto seleccionado.">🎯 Definir tests</button>
+        <button class="tool tool-tarea" id="btnEscribirTests" disabled title="Ana Liz convierte sus definiciones en tests REALES de código (con su ID). Necesita tests definidos.">⌨️ Escribir tests</button>
+        <button class="tool" id="btnDebug" disabled title="Vuelca en la consola del navegador (F12) el texto que se ENSAMBLA para el alcance elegido: el hilo + el foco. No manda nada a nadie, solo log.">🐞 Debug</button>
         <!-- doble modo de envío: qué hace Enter (envía / salta línea). Persiste. -->
         <div class="send-mode">
           <span class="sm-lbl">Enter:</span>
@@ -526,11 +851,14 @@
     <ul class="tarea-list" id="tareaList"></ul>
   </aside>
 
+<script src="/forge/forge-md.js"></script>
 <script>
   const listEl = document.getElementById('chatList');
   const tareaListEl = document.getElementById('tareaList');
   const tareaDefEl = document.getElementById('tareaDef');
+  const tareaActsBarEl = document.getElementById('tareaActsBar');
   let currentTarea = null;   // F9b: la tarea abierta en el centro (su definición fija), o null
+  let editingTareaDef = false; // true mientras se edita la definición a mano (no la pises con el sondeo)
   const threadEl = document.getElementById('thread');
   const titleEl = document.getElementById('chatTitle');
   const btnWand = document.getElementById('btnWand');
@@ -547,7 +875,29 @@
   const btnChallenge = document.getElementById('btnChallenge');
   const btnTarea = document.getElementById('btnTarea');
   const btnResumir = document.getElementById('btnResumir');
-  const composerBtns = [btnResponder, btnCharlar, btnInvestigar, btnConsejo, btnDiscutir, btnChallenge, btnTarea, btnResumir];
+  const btnDebug = document.getElementById('btnDebug');
+  const btnDefinirTests = document.getElementById('btnDefinirTests');
+  const btnEscribirTests = document.getElementById('btnEscribirTests');
+  const composerBtns = [btnResponder, btnCharlar, btnInvestigar, btnConsejo, btnDiscutir, btnChallenge, btnTarea, btnResumir, btnDebug, btnDefinirTests, btnEscribirTests];
+  // Los botones SOLO-de-tarea (Definir/Escribir tests): se ocultan fuera de una tarea.
+  const tareaBtns = [btnDefinirTests, btnEscribirTests];
+  function syncTareaBtns() {
+    const enTarea = !!currentTarea;
+    for (const b of tareaBtns) b.style.display = enTarea ? '' : 'none';
+    if (enTarea) {
+      const tests = (currentTarea.testsPlan && currentTarea.testsPlan.tests) || [];
+      const facil = complejidadDe(currentTarea) === 'facil';
+      const pendientes = tests.some((x) => (x.estado || 'definido') === 'definido');
+      // FÁCIL: Ana Liz no define → 🎯 bloqueado.
+      btnDefinirTests.disabled = facil || !active;
+      btnDefinirTests.title = facil
+        ? 'Tarea fácil: Ana Liz no define tests. Añádelos a mano desde la ficha.'
+        : 'Ana Liz define los tests en papel (dado/cuando/entonces)';
+      // ESCRIBIR: solo si hay definiciones PENDIENTES de escribir (cualquier nivel).
+      btnEscribirTests.disabled = !pendientes || !active;
+      btnEscribirTests.title = pendientes ? 'Ana Liz escribe los tests reales (código) de las definiciones pendientes' : 'No hay definiciones pendientes de escribir';
+    }
+  }
 
   // ── barra del ciclo (F21) ────────────────────────────────────────────────────
   const bcEl = document.getElementById('breadcrumb');
@@ -572,26 +922,41 @@
   let currentTitle = '';
   let active = null;
   let lastCount = -1;
-  let lastPending = false;
+  let lastPendingSig = '';
   let lastSig = '';
   let pollTimer = null;
-  // "pending": acabamos de enviar y esperamos la respuesta de un headless.
-  let pending = false;
-  let pendingBaseline = 0;
+  // Fantasmas "pensando": UNO por personaje en vuelo. Cada fantasma PERSISTE hasta
+  // que llega el mensaje OFICIAL de ESE personaje — que hable otro NO lo borra.
+  //   { author, parent, base }  — base = nº de mensajes de ese autor al lanzar; el
+  //   fantasma se retira cuando ese contador crece (llegó su mensaje).
+  let pendings = [];
   let otherCount = 0;
-  let pendingParent = null;
-  let pendingAuthor = 'iris';
   // F22: el mensaje SELECCIONADO (el rey) + el SCOPE universal. La selección
   // manda sobre qué actúan las herramientas; charlar/responder cuelgan de él.
   let selectedId = null;
   let scope = 'mensaje';
   let editTarget = null;  // id del mensaje en edición (null = no estamos editando)
-  let selectAfterReply = false; // Discutir: al llegar la réplica, el rey salta a ella
+  let selectAfterReplyAuthor = null; // Discutir: al llegar la réplica de ESE autor, el rey salta a ella
+
+  // Añade un fantasma "pensando" para `author` (colgando de `parent`). base = cuántos
+  // mensajes suyos hay AHORA → el sondeo lo retira cuando ese número crezca. Si ya
+  // había uno suyo (relanzado), lo reemplaza. Los personajes con mensaje VIVO real
+  // (Aubé/Miguel) NO usan esto: su placeholder ya es un mensaje de verdad.
+  function countAuthorMsgs(author) {
+    const msgs = (lastChat && lastChat.messages) || [];
+    return msgs.filter((m) => !m.collapsed && m.author === author).length;
+  }
+  function addPending(author, parent) {
+    pendings = pendings.filter((p) => p.author !== author);
+    pendings.push({ author, parent: (parent == null ? null : parent), base: countAuthorMsgs(author) });
+  }
+  function pendingSig() { return pendings.map((p) => p.author + ':' + p.parent).join(','); }
   let lastChat = null;    // último chat renderizado
 
   const NAMES = {
     tie: 'Tie', iris: 'Iris', william: 'William', anselmo: 'Anselmo', aube: 'Aubé',
     stevens: 'Stevens', miyagi: 'Mr. Miyagi', romina: 'Romina', ariel: 'Ariel', miguel: 'Miguel', sistema: 'Sistema', revisor: 'Revisor',
+    analiz: 'Ana Liz',
   };
   function nameOf(a) { return NAMES[a] || (a ? a[0].toUpperCase() + a.slice(1) : '?'); }
 
@@ -703,6 +1068,230 @@
   btnPause.onclick = () => cycleDo(cycle && cycle.paused ? 'resume' : 'pause');
   targetChip.onclick = toggleTarget;
 
+  // ── 👥 Equipo: la pestaña de perfiles ────────────────────────────────────────
+  // Lee /api/people y pinta una tarjeta por empleado: su descripción (las
+  // instrucciones REALES que usa al lanzarse, renderizadas en markdown y editables)
+  // y su modelo por persona ('' = hereda el global). Guardar va al JSON al instante.
+  const btnTeam = document.getElementById('btnTeam');
+  let teamModalEl = null;
+  btnTeam.onclick = openTeam;
+
+  function ensureTeamModal() {
+    if (teamModalEl) return teamModalEl;
+    const modal = document.createElement('div');
+    modal.className = 'team-modal'; modal.id = 'team-modal';
+    const box = document.createElement('div'); box.className = 'team-box';
+    box.onclick = (e) => e.stopPropagation();
+    const head = document.createElement('div'); head.className = 'team-head';
+    const h = document.createElement('h2'); h.textContent = '👥 Equipo';
+    const sub = document.createElement('span'); sub.className = 'team-sub';
+    sub.textContent = 'El perfil de cada empleado: su descripción (sus instrucciones reales) y el modelo con el que trabaja.';
+    const x = document.createElement('button'); x.className = 'team-x'; x.textContent = '✕';
+    x.onclick = () => { modal.style.display = 'none'; };
+    head.appendChild(h); head.appendChild(sub); head.appendChild(x);
+    const list = document.createElement('div'); list.className = 'team-list';
+    box.appendChild(head); box.appendChild(list);
+    modal.appendChild(box);
+    modal.onclick = () => { modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+    teamModalEl = modal;
+    return modal;
+  }
+
+  async function openTeam() {
+    const modal = ensureTeamModal();
+    const list = modal.querySelector('.team-list');
+    list.innerHTML = '<div class="cost-loading">Cargando equipo…</div>';
+    modal.style.display = 'block';
+    let data;
+    try { data = await (await fetch('/api/people')).json(); }
+    catch (e) { list.innerHTML = '<div class="cost-loading">No se pudo cargar: ' + esc(e.message) + '</div>'; return; }
+    list.innerHTML = '';
+    const choices = data.choices || [];
+    const gm = data.globalModel || '';
+    const catalogo = data.catalogo || { lee: [], escribe: [], herramientas: [] };
+    for (const p of (data.people || [])) list.appendChild(renderProfileCard(p, choices, gm, catalogo));
+  }
+
+  function renderProfileCard(p, choices, globalModel, catalogo) {
+    const card = document.createElement('div'); card.className = 'team-card';
+    const rebuild = () => card.replaceWith(renderProfileCard(p, choices, globalModel, catalogo));
+
+    // cabecera: nombre · id NEUTRO (P-NNN). El id manda en URLs/botones; el nombre
+    // se puede cambiar libremente sin romper nada.
+    const top = document.createElement('div'); top.className = 'tc-top';
+    const nm = document.createElement('span'); nm.className = 'tc-name'; nm.textContent = p.nombre;
+    const sl = document.createElement('span'); sl.className = 'tc-slug'; sl.textContent = p.id;
+    top.appendChild(nm); top.appendChild(sl);
+    card.appendChild(top);
+
+    // descripción renderizada (markdown). CLIC en el texto = editar (no hay botón).
+    const desc = document.createElement('div'); desc.className = 'tc-desc tc-clickable';
+    desc.title = 'Clic para editar la descripción';
+    fillBubble(desc, p.descripcion || '_(sin descripción)_');
+    card.appendChild(desc);
+
+    // ── Modelo (etiqueta arriba, control debajo) ──
+    const modelSec = document.createElement('div'); modelSec.className = 'tc-sec';
+    const mlbl = document.createElement('div'); mlbl.className = 'tc-sec-lbl'; mlbl.textContent = 'Modelo';
+    const sel = document.createElement('select'); sel.className = 'tc-model';
+    for (const c of choices) { const o = document.createElement('option'); o.value = c.value; o.textContent = c.label; sel.appendChild(o); }
+    sel.value = p.modelo || '';
+    const hint = document.createElement('span'); hint.className = 'tc-model-hint';
+    const setHint = () => { hint.textContent = sel.value ? '' : ('hereda el global' + (globalModel ? ': ' + globalModel : '')); };
+    setHint();
+    const saved = document.createElement('span'); saved.className = 'tc-saved'; saved.textContent = '✓ guardado';
+    sel.onchange = async () => {
+      sel.disabled = true;
+      try {
+        const r = await fetch('/api/people/' + encodeURIComponent(p.id), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelo: sel.value }),
+        });
+        if (!r.ok) throw new Error(((await r.json()) || {}).error || 'error');
+        p.modelo = sel.value; setHint(); flash(saved);
+      } catch (e) { alert('No se pudo cambiar el modelo: ' + e.message); sel.value = p.modelo || ''; }
+      sel.disabled = false;
+    };
+    const modelCtl = document.createElement('div'); modelCtl.className = 'tc-sec-ctl';
+    modelCtl.appendChild(sel); modelCtl.appendChild(hint); modelCtl.appendChild(saved);
+    modelSec.appendChild(mlbl); modelSec.appendChild(modelCtl);
+    card.appendChild(modelSec);
+
+    // ── Permisos (etiqueta arriba; lee/escribe/MCP en líneas; clic = abre el modal) ──
+    const permSec = document.createElement('div'); permSec.className = 'tc-sec';
+    const plbl = document.createElement('div'); plbl.className = 'tc-sec-lbl'; plbl.textContent = 'Permisos';
+    const savedS = document.createElement('span'); savedS.className = 'tc-saved'; savedS.textContent = '✓ guardado'; plbl.appendChild(savedS);
+    const permBlock = document.createElement('div'); permBlock.className = 'tc-perm tc-clickable';
+    permBlock.title = 'Clic para editar los permisos';
+    const renderPerm = () => {
+      permBlock.innerHTML = '';
+      const s = p.scope || {};
+      const lee = (typeof s.lee === 'string' && s.lee) ? s.lee : (Array.isArray(s.lee) && s.lee.length ? s.lee.join(', ') : 'nada');
+      const escribe = (s.escribe && s.escribe.length) ? s.escribe.join(', ') : 'no escribe';
+      const herr = (p.herramientas && p.herramientas.length) ? p.herramientas.join(', ') : '—';
+      for (const [k, v] of [['Lee', lee], ['Escribe', escribe], ['MCP', herr]]) {
+        const line = document.createElement('div'); line.className = 'tc-perm-line';
+        const kk = document.createElement('span'); kk.className = 'tc-perm-k'; kk.textContent = k + ': ';
+        line.appendChild(kk); line.appendChild(document.createTextNode(v));
+        permBlock.appendChild(line);
+      }
+    };
+    renderPerm();
+    permBlock.onclick = () => openPermisos(p, catalogo, () => { renderPerm(); flash(savedS); });
+    permSec.appendChild(plbl); permSec.appendChild(permBlock);
+    card.appendChild(permSec);
+
+    // editar descripción: clic en el texto → un textarea GRANDE en su sitio, con
+    // guardar/cancelar justo debajo. Modelo y permisos se ocultan mientras editas.
+    desc.onclick = () => {
+      const ta = document.createElement('textarea'); ta.className = 'tc-edit'; ta.value = p.descripcion || '';
+      const eact = document.createElement('div'); eact.className = 'tc-row';
+      const save = document.createElement('button'); save.className = 'team-btn primary'; save.textContent = 'Guardar';
+      const cancel = document.createElement('button'); cancel.className = 'team-btn'; cancel.textContent = 'Cancelar';
+      eact.appendChild(save); eact.appendChild(cancel);
+      desc.replaceWith(ta); ta.after(eact);
+      modelSec.style.display = 'none'; permSec.style.display = 'none';
+      ta.focus();
+      cancel.onclick = rebuild;
+      save.onclick = async () => {
+        save.classList.add('busy'); save.disabled = true;
+        try {
+          const r = await fetch('/api/people/' + encodeURIComponent(p.id), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ descripcion: ta.value }),
+          });
+          if (!r.ok) throw new Error(((await r.json()) || {}).error || 'error');
+          p.descripcion = ta.value; rebuild();
+        } catch (e) { alert('No se pudo guardar: ' + e.message); save.classList.remove('busy'); save.disabled = false; }
+      };
+    };
+    return card;
+  }
+
+  function flash(el) { el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 1400); }
+
+  // Modal de permisos: TODO lo posible en casillas (leer = una; escribir y
+  // herramientas MCP = varias). Guarda al endpoint por id; cierra y refresca el resumen.
+  function permSection(title, hint) {
+    const el = document.createElement('div'); el.className = 'perm-sec';
+    const h = document.createElement('div'); h.className = 'perm-sec-h'; h.textContent = title;
+    if (hint) { const s = document.createElement('span'); s.className = 'perm-sec-hint'; s.textContent = ' — ' + hint; h.appendChild(s); }
+    const body = document.createElement('div'); body.className = 'perm-sec-body';
+    el.appendChild(h); el.appendChild(body);
+    return { el, body };
+  }
+  function openPermisos(p, catalogo, onSaved) {
+    const modal = document.createElement('div'); modal.className = 'perm-modal';
+    const box = document.createElement('div'); box.className = 'perm-box'; box.onclick = (e) => e.stopPropagation();
+    const close = () => modal.remove();
+    modal.onclick = close;
+    const h = document.createElement('h3'); h.textContent = 'Permisos de ' + p.nombre + '  ';
+    const idtag = document.createElement('span'); idtag.className = 'tc-slug'; idtag.textContent = p.id; h.appendChild(idtag);
+    box.appendChild(h);
+
+    const leeSec = permSection('Puede leer', 'qué parte del repo ve (una opción)');
+    const leeName = 'lee-' + p.id;
+    (catalogo.lee || []).forEach((o) => {
+      const lab = document.createElement('label'); lab.className = 'perm-opt';
+      const r = document.createElement('input'); r.type = 'radio'; r.name = leeName; r.value = o.value;
+      r.checked = (p.scope.lee || '') === o.value;
+      lab.appendChild(r); lab.appendChild(document.createTextNode(' ' + o.label)); leeSec.body.appendChild(lab);
+    });
+    box.appendChild(leeSec.el);
+
+    const escSec = permSection('Puede escribir', 'qué puede modificar (vacío = no escribe)');
+    const escBoxes = [];
+    (catalogo.escribe || []).forEach((o) => {
+      const lab = document.createElement('label'); lab.className = 'perm-opt';
+      const c = document.createElement('input'); c.type = 'checkbox'; c.value = o.value;
+      c.checked = (p.scope.escribe || []).includes(o.value);
+      escBoxes.push(c); lab.appendChild(c); lab.appendChild(document.createTextNode(' ' + o.label)); escSec.body.appendChild(lab);
+    });
+    box.appendChild(escSec.el);
+
+    const herrSec = permSection('Herramientas MCP', 'qué herramientas puede llamar — cítalas por su nombre en la descripción');
+    const herrBoxes = [];
+    (catalogo.herramientas || []).forEach((o) => {
+      const lab = document.createElement('label'); lab.className = 'perm-opt';
+      const c = document.createElement('input'); c.type = 'checkbox'; c.value = o.value;
+      c.checked = (p.herramientas || []).includes(o.value);
+      herrBoxes.push(c); lab.appendChild(c);
+      lab.appendChild(document.createTextNode(' '));
+      const code = document.createElement('code'); code.textContent = o.value; lab.appendChild(code);
+      if (o.desc) { const d = document.createElement('span'); d.className = 'perm-desc'; d.textContent = ' — ' + o.desc; lab.appendChild(d); }
+      herrSec.body.appendChild(lab);
+    });
+    box.appendChild(herrSec.el);
+
+    const askLab = document.createElement('label'); askLab.className = 'perm-opt perm-ask';
+    const ask = document.createElement('input'); ask.type = 'checkbox'; ask.checked = p.scope.preguntar !== false;
+    askLab.appendChild(ask); askLab.appendChild(document.createTextNode(' Pregunta antes de actuar'));
+    box.appendChild(askLab);
+
+    const acts = document.createElement('div'); acts.className = 'perm-acts';
+    const save = document.createElement('button'); save.className = 'team-btn primary'; save.textContent = 'Guardar';
+    const cancel = document.createElement('button'); cancel.className = 'team-btn'; cancel.textContent = 'Cancelar';
+    cancel.onclick = close; acts.appendChild(save); acts.appendChild(cancel); box.appendChild(acts);
+
+    save.onclick = async () => {
+      save.classList.add('busy'); save.disabled = true;
+      const leeSel = box.querySelector('input[name="' + leeName + '"]:checked');
+      const lee = leeSel ? leeSel.value : '';
+      const escribe = escBoxes.filter((c) => c.checked).map((c) => c.value);
+      const herramientas = herrBoxes.filter((c) => c.checked).map((c) => c.value);
+      try {
+        const r = await fetch('/api/people/' + encodeURIComponent(p.id), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scope: { lee, escribe, preguntar: ask.checked }, herramientas }),
+        });
+        if (!r.ok) throw new Error(((await r.json()) || {}).error || 'error');
+        const updated = (await r.json()).person; p.scope = updated.scope; p.herramientas = updated.herramientas;
+        close(); if (onSaved) onSaved();
+      } catch (e) { alert('No se pudo guardar: ' + e.message); save.classList.remove('busy'); save.disabled = false; }
+    };
+
+    modal.appendChild(box); document.body.appendChild(modal);
+  }
+
   // ── listas ───────────────────────────────────────────────────────────────────
   async function loadList() {
     const chats = await (await fetch('/api/chats')).json();
@@ -714,11 +1303,10 @@
     for (const c of chats.slice().reverse()) {
       const li = document.createElement('li');
       li.className = 'chat-item' + (c.id === active ? ' active' : '');
-      li.innerHTML = '<div class="row"><div class="body"><div class="title"></div>'
-        + '<div class="meta"></div></div>'
+      li.innerHTML = '<div class="row"><div class="body"><div class="title"></div></div>'
         + '<button class="chat-del" title="Borrar conversación (definitivo)">🗑</button></div>';
       li.querySelector('.title').textContent = c.title;
-      li.querySelector('.meta').textContent = '#' + c.id + ' · ' + (c.type || '');
+      li.querySelector('.title').title = c.title + '  (#' + c.id + ' · ' + (c.type || '') + ')';
       li.querySelector('.body').onclick = () => openChat(c.id);
       li.querySelector('.chat-del').onclick = (e) => { e.stopPropagation(); deleteChat(c); };
       listEl.appendChild(li);
@@ -735,7 +1323,7 @@
     if (active === c.id) {
       active = null; currentTarea = null;
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      lastCount = -1; pending = false;
+      lastCount = -1; pendings = [];
       cancelEdit();
       inputEl.disabled = true; inputEl.value = '';
       for (const b of composerBtns) b.disabled = true;
@@ -757,20 +1345,48 @@
     // el motor ya devuelve {tareas: [decoradas+ordenadas], grupos: [...]}.
     const ts = (data && data.tareas) || [];
     const grupos = (data && data.grupos) || [];
+    // sincroniza la tarea abierta con lo último del servidor (p.ej. el plan que
+    // Aubé acaba de adoptar) y re-pinta su ficha si cambió — salvo que la estés
+    // editando a mano (no pisar tu edición a medias).
+    if (currentTarea && !editingTareaDef) {
+      const ut = ts.find((x) => x.id === currentTarea.id);
+      if (ut && JSON.stringify(ut) !== JSON.stringify(currentTarea)) { currentTarea = ut; renderTareaDef(); }
+    }
     tareaListEl.innerHTML = '';
     if (!ts.length) {
       tareaListEl.innerHTML = '<li class="empty">Aún no hay tareas.<br>Nacen al aprobar a Aubé.</li>';
       return;
     }
-    // pinta cajón a cajón en el orden del motor; salta los cajones vacíos.
+    // pinta cajón a cajón en el orden del motor; salta los cajones vacíos. La
+    // cabecera de cada grupo PLIEGA/DESPLIEGA sus tareas (clic en el título); el
+    // grupo "Terminadas" arranca PLEGADO para no meter ruido. Estado persistido.
     for (const g of grupos) {
       const enCajon = ts.filter((t) => t.grupo === g.key);
       if (!enCajon.length) continue;
+      const collapsed = grupoColapsado(g.key);
       const head = document.createElement('li');
-      head.className = 'tarea-grupo'; head.textContent = g.label;
+      head.className = 'tarea-grupo' + (collapsed ? ' colapsado' : '');
+      head.innerHTML = '<span class="tg-arrow">' + (collapsed ? '▸' : '▾') + '</span>'
+        + '<span class="tg-label"></span><span class="tg-count">' + enCajon.length + '</span>';
+      head.querySelector('.tg-label').textContent = g.label;
+      head.onclick = () => { toggleGrupo(g.key); loadTareas(); };
       tareaListEl.appendChild(head);
-      for (const t of enCajon) tareaListEl.appendChild(renderTareaItem(t));
+      if (!collapsed) for (const t of enCajon) tareaListEl.appendChild(renderTareaItem(t));
     }
+  }
+  // estado plegado de los grupos de tareas (persistido). "Terminadas" plegado por defecto.
+  function grupoColapsado(key) {
+    const s = readGruposColapsados();
+    return key in s ? s[key] : (key === 'terminadas');
+  }
+  function toggleGrupo(key) {
+    const s = readGruposColapsados();
+    s[key] = !grupoColapsado(key);
+    try { localStorage.setItem('forge_grupos_colapsados', JSON.stringify(s)); } catch {}
+  }
+  function readGruposColapsados() {
+    try { return JSON.parse(localStorage.getItem('forge_grupos_colapsados') || '{}') || {}; }
+    catch { return {}; }
   }
 
   function renderTareaItem(t) {
@@ -784,7 +1400,10 @@
     const ico = document.createElement('span'); ico.className = 'tarea-ico' + (t.estado === 'error' ? ' rojo' : t.estado === 'enMaster' ? ' verde' : '');
     ico.textContent = t.icon;
     const title = document.createElement('div'); title.className = 'title'; title.textContent = t.title;
-    row.append(ico, title);
+    const del = document.createElement('button'); del.className = 'tarea-del';
+    del.textContent = '🗑'; del.title = 'Borrar tarea (devuelve el plan a su conversación origen)';
+    del.onclick = (e) => { e.stopPropagation(); borrarTarea(t); };
+    row.append(ico, title, del);
     row.onclick = () => openTarea(t.id);   // F9b: abre la tarea en el centro
     li.appendChild(row);
     li.title = t.body || '';
@@ -829,27 +1448,10 @@
     return li;
   }
 
-  // ── pantallazos en el mensaje: thumbnail + lightbox ──────────────────────────
-  // Rellena la burbuja troceando el texto: los trozos normales van como nodos de
-  // texto (a prueba de inyección, sin innerHTML) y cada ruta de pantallazo se pinta
-  // como un <img> miniatura que al clicar abre el lightbox con la imagen completa.
-  const IMG_RE = /pantallazos\/pantallazo-\d+\.(?:png|jpe?g|gif|webp)/g;
-  function fillBubble(el, text) {
-    el.textContent = '';
-    const t = String(text == null ? '' : text);
-    let last = 0; let m; IMG_RE.lastIndex = 0;
-    while ((m = IMG_RE.exec(t)) !== null) {
-      if (m.index > last) el.appendChild(document.createTextNode(t.slice(last, m.index)));
-      const src = m[0];
-      const img = document.createElement('img');
-      img.className = 'thumb'; img.src = src; img.alt = src; img.loading = 'lazy';
-      img.title = 'Clic para ver completo';
-      img.onclick = (ev) => { ev.stopPropagation(); openLightbox(src); };
-      el.appendChild(img);
-      last = m.index + m[0].length;
-    }
-    if (last < t.length) el.appendChild(document.createTextNode(t.slice(last)));
-  }
+  // ── motor markdown → DOM ─────────────────────────────────────────────────────
+  // Vive en /forge/forge-md.js (cargado por <script> arriba): cuelga de window
+  // `fillBubble`, `mdToFragment`, `inlineBlock` e `IMG_RE`. Lo usan el pintor de
+  // mensajes y las fichas de tarea/plan. `makeThumb` llama a `openLightbox` (↓).
   function openLightbox(src) {
     let lb = document.getElementById('lightbox');
     if (!lb) {
@@ -866,7 +1468,106 @@
     if (e.key !== 'Escape') return;
     const lb = document.getElementById('lightbox');
     if (lb && lb.style.display !== 'none') lb.style.display = 'none';
+    const cm = document.getElementById('cost-modal');
+    if (cm && cm.style.display !== 'none') cm.style.display = 'none';
+    const pm = document.querySelector('.perm-modal');
+    if (pm) { pm.remove(); return; }   // el de permisos primero (va por encima)
+    const tm = document.getElementById('team-modal');
+    if (tm && tm.style.display !== 'none') tm.style.display = 'none';
+    const um = document.getElementById('usage-modal');
+    if (um && um.style.display !== 'none') um.style.display = 'none';
   });
+
+  // ── modal de coste ────────────────────────────────────────────────────────────
+  // Al pinchar la chapa $: trae /api/tokens/run/:runId y pinta el total + cada
+  // petición (agente · modelo · permisos · tokens · coste · textoEntrada plegable).
+  function esc(s) { const d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+  function fmtUsd(v) { return v == null ? '—' : '$' + Number(v).toFixed(4); }
+  function fmtNum(v) { return v == null ? '—' : Number(v).toLocaleString('es-ES'); }
+  function openCostModal(runId) {
+    let cm = document.getElementById('cost-modal');
+    if (!cm) {
+      cm = document.createElement('div');
+      cm.id = 'cost-modal'; cm.className = 'cost-modal';
+      const box = document.createElement('div');
+      box.className = 'cost-box';
+      box.onclick = (ev) => ev.stopPropagation();
+      cm.appendChild(box);
+      cm.onclick = () => { cm.style.display = 'none'; };
+      document.body.appendChild(cm);
+    }
+    const box = cm.querySelector('.cost-box');
+    box.innerHTML = '<div class="cost-loading">Cargando coste…</div>';
+    cm.style.display = 'flex';
+    if (!runId) { box.innerHTML = '<div class="cost-loading">Sin runId para este mensaje.</div>'; return; }
+    fetch('/api/tokens/run/' + encodeURIComponent(runId))
+      .then((r) => r.json())
+      .then((data) => {
+        const t = data.total || {};
+        let html = '<div class="cost-head">'
+          + '<span class="cost-total">' + fmtUsd(t.costUsd) + '</span>'
+          + '<span class="cost-sub">' + (data.requests ? data.requests.length : 0) + ' petición(es) · '
+          + 'in ' + fmtNum(t.inputTokens) + ' · out ' + fmtNum(t.outputTokens)
+          + ' · cache-read ' + fmtNum(t.cacheReadTokens) + ' · cache-new ' + fmtNum(t.cacheCreationTokens) + '</span>'
+          + '<button class="cost-x" type="button">✕</button></div>';
+        const reqs = data.requests || [];
+        if (!reqs.length) {
+          html += '<div class="cost-loading">No hay peticiones registradas para este run.</div>';
+        } else {
+          html += '<div class="cost-list">';
+          for (const q of reqs) {
+            const warn = q.usageFound === false;
+            html += '<div class="cost-req' + (warn ? ' warn' : '') + '">'
+              + '<div class="cost-req-head">'
+              + '<b>' + esc(q.agente || '?') + '</b>'
+              + ' <span class="cost-tag">' + esc(q.modelo || '—') + '</span>'
+              + ' <span class="cost-tag">' + esc(q.permisos || '—') + '</span>'
+              + ' <span class="cost-price">' + (warn ? '⚠️ ' : '') + fmtUsd(q.costUsd) + '</span>'
+              + '</div>'
+              + '<div class="cost-req-toks">in ' + fmtNum(q.inputTokens) + ' · out ' + fmtNum(q.outputTokens)
+              + ' · cache-read ' + fmtNum(q.cacheReadTokens) + ' · cache-new ' + fmtNum(q.cacheCreationTokens)
+              + (q.spawn ? ' · <i>' + esc(q.spawn) + '</i>' : '') + '</div>'
+              + '<details class="cost-input" open><summary>texto de entrada (' + fmtNum(q.promptChars) + ' chars)</summary>'
+              + '<pre>' + esc(q.textoEntrada || '') + '</pre></details>'
+              + '</div>';
+          }
+          html += '</div>';
+        }
+        box.innerHTML = html;
+        const x = box.querySelector('.cost-x');
+        if (x) x.onclick = () => { cm.style.display = 'none'; };
+      })
+      .catch((e) => { box.innerHTML = '<div class="cost-loading">No se pudo cargar el coste: ' + esc(e.message) + '</div>'; });
+  }
+
+  // ── ticker EN VIVO de un build (cuenta los segundos en el navegador) ──────────
+  // "hace Xs" se calcula AQUÍ desde el timestamp del último ping, así sube de verdad
+  // segundo a segundo (en vez de un número congelado que escribió el servidor).
+  function haceCuanto(ms) {
+    const s = Math.max(0, Math.round((Date.now() - Number(ms)) / 1000));
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60); const r = s % 60;
+    return m + 'm' + (r ? ' ' + r + 's' : '');
+  }
+  function horaDe(ms) {
+    try { return new Date(Number(ms)).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); } catch { return '?'; }
+  }
+  // si el último latido tiene más de este tiempo, damos el build por SIN SEÑAL
+  // (el proceso pudo cortarse sin avisar). El latido sano repinta cada 10s.
+  const TICKER_STALE_MS = 60 * 1000;
+  function updateTicker(el) {
+    const ping = el.dataset.ping;
+    const started = el.dataset.started;
+    const stale = ping && (Date.now() - Number(ping)) > TICKER_STALE_MS;
+    const partes = [];
+    if (started) partes.push('arrancado a las ' + horaDe(started));
+    if (ping) partes.push((stale ? 'sin señal desde hace ' : 'último ping hace ') + haceCuanto(ping));
+    el.classList.toggle('stale', !!stale);
+    el.textContent = (stale ? '⚠️ ' : '🟢 ') + partes.join(' · ')
+      + (stale ? ' — el build pudo cortarse' : '');
+  }
+  // un solo reloj global: cada segundo refresca todos los tickers vivos en pantalla.
+  setInterval(() => { document.querySelectorAll('.live-ticker').forEach(updateTicker); }, 1000);
 
   // ── árbol de mensajes ─────────────────────────────────────────────────────────
   // F22: ya NO hay barra de acciones por mensaje. El nodo se SELECCIONA al hacer
@@ -890,10 +1591,79 @@
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble ' + (m.author === 'tie' ? 'tie' : 'other');
-    fillBubble(bubble, m.text);
-    bubble.title = 'Clic para seleccionar este mensaje (el rey)';
-    bubble.onclick = () => selectMsg(m.id);
+    fillBubble(bubble, stripMachineBlocks(m.text));
+    // stub de tarea aprobada ("[Tarea NNN creada: …]"): el plan ya vive en la tarea;
+    // este mensaje es un LINK — clic en él abre la tarea en el carril central.
+    if (m.tareaRef != null) {
+      bubble.classList.add('tarea-link-msg');
+      bubble.title = 'Abrir la tarea #' + m.tareaRef;
+      bubble.onclick = (e) => { e.stopPropagation(); openTarea(m.tareaRef); };
+    } else {
+      bubble.title = 'Clic para seleccionar este mensaje (el rey)';
+      bubble.onclick = () => selectMsg(m.id);
+    }
     node.appendChild(bubble);
+
+    // chapa de coste $ — solo en el mensaje "primario" de un run (uno por spawn).
+    // Si el CLI no reportó coste (usageFound:false) → ⚠️ en vez de "$0.0000".
+    if (m.cost && m.costPrimary) {
+      const chip = document.createElement('span');
+      chip.className = 'cost-chip';
+      if (m.cost.usd != null) {
+        chip.textContent = '$' + Number(m.cost.usd).toFixed(4);
+      } else if (m.cost.usageFound === false) {
+        chip.textContent = '⚠️';
+        chip.title = 'El CLI no reportó coste para este mensaje';
+      } else {
+        chip.textContent = '⚠️';
+      }
+      chip.title = chip.title || 'Clic para ver el desglose de tokens y coste';
+      chip.onclick = (ev) => { ev.stopPropagation(); openCostModal(m.runId); };
+      node.appendChild(chip);
+    }
+
+    // build EN VIVO: botón "📸 Resumir" — genera una foto del avance A DEMANDA
+    // (Haiku). Antes se relanzaba solo cada 10s; ahora solo cuando Tie lo pide.
+    if (m.live) {
+      const rb = document.createElement('button');
+      rb.className = 'resume-chip';
+      rb.textContent = '📸 Resumir';
+      rb.title = 'Generar una foto del avance ahora mismo (resumen Haiku)';
+      rb.onclick = async (ev) => {
+        ev.stopPropagation();
+        rb.disabled = true; rb.textContent = '📸 Resumiendo…';
+        try {
+          const res = await fetch('/api/chats/' + active + '/resumir-build', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msgId: m.id }),
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) { rb.textContent = '📸 Resumir'; rb.disabled = false; if (j.error) alert(j.error); return; }
+          if (j.note) alert(j.note);
+          lastSig = ''; refreshThread();
+        } catch (e) { rb.textContent = '📸 Resumir'; rb.disabled = false; alert('No se pudo resumir: ' + e.message); }
+      };
+      node.appendChild(rb);
+      // ticker EN VIVO: "arrancado a las HH:MM · último ping hace Xs". Los timestamps
+      // vienen del servidor (liveStartedAt/livePingAt); el navegador cuenta los
+      // segundos solo, cada segundo (no un número congelado).
+      if (m.livePingAt) {
+        const tk = document.createElement('div');
+        tk.className = 'live-ticker';
+        if (m.liveStartedAt) tk.dataset.started = String(m.liveStartedAt);
+        tk.dataset.ping = String(m.livePingAt);
+        updateTicker(tk);
+        node.appendChild(tk);
+      }
+    }
+
+    // PREGUNTA de un agente: si nadie (Tie) le ha colgado respuesta, está esperando
+    // → resáltala y ofrece la caja para contestar (la herramienta MCP está bloqueada
+    // esperando justo esto). Cuando respondas, el agente la recibe y sigue.
+    if (m.type === 'pregunta') {
+      bubble.classList.add('pregunta');
+      const answered = (byParent.get(m.id) || []).some((k) => k.author === 'tie');
+      if (!answered) { bubble.classList.add('pregunta-pendiente'); node.appendChild(makeAnswerBox(m)); }
+    }
 
     const kids = byParent.get(m.id) || [];
     if (kids.length) {
@@ -922,6 +1692,37 @@
     return bubble;
   }
 
+  // Caja para responder a una pregunta de un agente (la herramienta MCP espera).
+  function makeAnswerBox(m) {
+    const box = document.createElement('div'); box.className = 'answer-box';
+    const ta = document.createElement('textarea'); ta.className = 'answer-input';
+    ta.placeholder = 'Tu respuesta para ' + nameOf(m.author) + ' (está esperando)…';
+    ta.onclick = (e) => e.stopPropagation();
+    const btn = document.createElement('button'); btn.className = 'td-btn'; btn.textContent = '↩ Responder';
+    btn.onclick = (e) => { e.stopPropagation(); responderPregunta(m.id, ta.value); };
+    // Ctrl/⌘+Enter envía
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); responderPregunta(m.id, ta.value); }
+    });
+    box.append(ta, btn);
+    return box;
+  }
+
+  async function responderPregunta(qId, text) {
+    text = String(text || '').trim();
+    if (!text) { alert('Escribe una respuesta.'); return; }
+    if (!active) return;
+    let res, j;
+    try {
+      res = await fetch('/api/chats/' + active + '/preguntas/' + qId + '/responder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+      });
+      j = await res.json();
+    } catch { alert('No se pudo enviar la respuesta.'); return; }
+    if (!res.ok) { alert('No se pudo enviar: ' + (j.error || 'error')); return; }
+    lastSig = ''; refreshThread();
+  }
+
   const THINKING_ID = '__thinking__';
 
   function renderThread(chat) {
@@ -940,9 +1741,10 @@
 
     const present = new Set(real.map((m) => m.id));
     const msgs = real.slice();
-    if (pending) {
-      const parent = (pendingParent != null && present.has(pendingParent)) ? pendingParent : null;
-      msgs.push({ id: THINKING_ID, author: pendingAuthor, type: 'pensando', replyTo: parent, thinking: true, text: '' });
+    // un fantasma por personaje en vuelo (cada uno cuelga de su parent si sigue vivo).
+    for (const p of pendings) {
+      const parent = (p.parent != null && present.has(p.parent)) ? p.parent : null;
+      msgs.push({ id: THINKING_ID + ':' + p.author, author: p.author, type: 'pensando', replyTo: parent, thinking: true, text: '' });
     }
 
     if (!msgs.length) {
@@ -958,11 +1760,22 @@
     }
     const roots = byParent.get('root') || [];
     threadEl.innerHTML = '';
+    // aviso global arriba: ¿hay preguntas de agentes esperando tu respuesta?
+    const pendientes = msgs.filter((m) => m.type === 'pregunta'
+      && !msgs.some((x) => x.author === 'tie' && Number(x.replyTo) === Number(m.id)));
+    if (pendientes.length) {
+      const b = document.createElement('div'); b.className = 'pregunta-banner';
+      b.textContent = '⚠ ' + pendientes.length + (pendientes.length === 1 ? ' pregunta espera' : ' preguntas esperan') + ' tu respuesta — pulsa para ir a ella';
+      b.onclick = () => { const el = threadEl.querySelector('.bubble.pregunta-pendiente'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+      threadEl.appendChild(b);
+    }
     const frag = document.createDocumentFragment();
     const rootsAreProngs = roots.length > 1;
     for (const r of roots) frag.appendChild(renderNode(r, byParent, rootsAreProngs));
     threadEl.appendChild(frag);
-    threadEl.scrollTop = threadEl.scrollHeight;
+    // el scroll vive ahora en el carril que envuelve ficha + hilo (centerScroll).
+    const cs = document.getElementById('centerScroll');
+    if (cs) cs.scrollTop = cs.scrollHeight;
     updateSelectionUI();
   }
 
@@ -997,21 +1810,9 @@
       selActs.appendChild(selActBtn('Editar', () => startEdit(m)));
       if (m.author === 'anselmo') selActs.appendChild(selActBtn('Compactar', () => compactar(m.id), true));
       if (m.author === 'aube') selActs.appendChild(selActBtn('Aprobar', () => aprobarTarea(), true));
-      // el informe de Miguel es de QUIEN construyó → de ahí cuelga "Traer el código".
-      // Solo en mensajes de Miguel; habilitado si hay algo que traer, si no, gris.
-      if (m.author === 'miguel' && currentTarea) {
-        // El cierre es AUTOMÁTICO al terminar Miguel (auto-merge a master). Este botón
-        // es el reintento MANUAL (p.ej. si el auto-merge petó y quieres reintentar).
-        const b = selActBtn('⬇ Subir a master', () => traerTarea(currentTarea.id), true);
-        b.disabled = true; b.title = 'Comprobando…';
-        selActs.appendChild(b);
-        // habilita el reintento salvo que ya esté en master (cierre feliz).
-        fetch('/api/tareas/' + currentTarea.id + '/traible').then((r) => r.json()).then((s) => {
-          b.disabled = !s.traible;
-          b.title = s.traible ? 'Trae todo el arbolito y lo sube a master (commit)'
-            : (s.reason === 'ya en master' ? 'Ya está en master ✓' : 'Nada que subir');
-        }).catch(() => {});
-      }
+      // "Subir a master" YA NO cuelga del informe de Miguel aquí: se perdía con el
+      // scroll. Ahora vive en la barra fija de acciones (renderTareaDef), siempre a
+      // la vista encima del input.
     } else {
       const lbl = document.createElement('span');
       lbl.innerHTML = active ? 'Escribe abajo para empezar el hilo'
@@ -1109,12 +1910,12 @@
       body: JSON.stringify({ text, replyTo: selectedId, scope }),
     });
     btnCharlar.disabled = false;
+    if (await apagadoEnCurso(res, () => charlar())) return;
     if (!res.ok) { alert('No se pudo enviar.'); return; }
     const j = await res.json().catch(() => ({}));
     inputEl.value = '';
-    pending = true; pendingBaseline = otherCount; pendingAuthor = 'iris';
-    pendingParent = j.pendingParent != null ? j.pendingParent
-      : (j.message && j.message.id != null ? j.message.id : null);
+    addPending('iris', j.pendingParent != null ? j.pendingParent
+      : (j.message && j.message.id != null ? j.message.id : null));
     lastSig = ''; refreshThread();
   }
 
@@ -1135,8 +1936,7 @@
     if (!res.ok) { alert('No se pudo lanzar.'); return; }
     const j = await res.json().catch(() => ({}));
     if (steer) inputEl.value = '';
-    pending = true; pendingBaseline = otherCount; pendingAuthor = author;
-    pendingParent = j.pendingParent != null ? j.pendingParent : targetId;
+    addPending(author, j.pendingParent != null ? j.pendingParent : targetId);
     lastSig = ''; refreshThread();
   }
 
@@ -1153,8 +1953,7 @@
     if (!res.ok) { alert('No se pudo lanzar el challenge.'); return; }
     const j = await res.json().catch(() => ({}));
     if (steer) inputEl.value = '';
-    pending = true; pendingBaseline = otherCount; pendingAuthor = 'william';
-    pendingParent = j.pendingParent != null ? j.pendingParent : targetId;
+    addPending('william', j.pendingParent != null ? j.pendingParent : targetId);
     lastSig = ''; refreshThread();
   }
 
@@ -1185,9 +1984,8 @@
     if (!res.ok) { alert('No se pudo lanzar la discusión.'); return; }
     const j = await res.json().catch(() => ({}));
     if (steer) inputEl.value = '';
-    pending = true; pendingBaseline = otherCount; pendingAuthor = author;
-    pendingParent = j.pendingParent != null ? j.pendingParent : targetId;
-    selectAfterReply = true;   // al llegar la réplica, el rey salta a ella
+    addPending(author, j.pendingParent != null ? j.pendingParent : targetId);
+    selectAfterReplyAuthor = author;   // al llegar SU réplica, el rey salta a ella
     lastSig = ''; refreshThread();
   }
 
@@ -1202,8 +2000,7 @@
     if (!res.ok) { alert('No se pudo resumir.'); return; }
     const j = await res.json().catch(() => ({}));
     if (steer) inputEl.value = '';
-    pending = true; pendingBaseline = otherCount; pendingAuthor = 'anselmo';
-    pendingParent = j.pendingParent != null ? j.pendingParent : lastMsgId();
+    addPending('anselmo', j.pendingParent != null ? j.pendingParent : lastMsgId());
     lastSig = ''; refreshThread();
   }
   async function compactar(noteId) {
@@ -1227,20 +2024,149 @@
     if (!res.ok) { alert('No se pudo crear la tarea.'); return; }
     const j = await res.json().catch(() => ({}));
     if (steer) inputEl.value = '';
-    if (!j.replacing) {
-      pending = true; pendingBaseline = otherCount; pendingAuthor = 'aube';
-      pendingParent = j.pendingParent;
-    }
+    // Aubé NO usa fantasma de front: su mensaje VIVO real (✦ Aubé está replanteando…)
+    // ya está en el hilo desde el servidor y el sondeo lo pinta.
     lastSig = ''; refreshThread();
   }
   async function aprobarTarea() {
     if (!active) return;
+    // el mensaje rey (el de Aubé sobre el que se pulsa "Aprobar") es el que se lleva
+    // la tarea: viaja como fromMsg → el back lo colapsa en su stub.
     const res = await fetch('/api/tareas', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fromChat: active }),
+      body: JSON.stringify({ fromChat: active, fromMsg: selectedId }),
     });
     if (!res.ok) { alert('No se pudo aprobar la tarea.'); return; }
+    // el plan ha salido del hilo (dejó su stub): refresca el hilo y las tareas.
+    lastSig = ''; refreshThread(); loadTareas();
+  }
+
+  // Borrar una tarea (definitivo): el plan VUELVE a su conversación origen (el stub
+  // se restaura al plan de Aubé). Si la tarea borrada era la abierta, cierra el
+  // centro. Refresca el hilo abierto (por si era el origen → ver el plan de vuelta).
+  async function borrarTarea(t) {
+    if (!confirm('Borrar la tarea "' + t.title + '" (#' + t.id + ')?\n\nEl plan vuelve a su conversación origen. Es definitivo.')) return;
+    const res = await fetch('/api/tareas/' + t.id, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) { alert('No se pudo borrar la tarea.'); return; }
+    if (currentTarea && currentTarea.id === t.id) {
+      // estaba abierta: su hilo se ha borrado con ella → vacía el centro.
+      active = null; currentTarea = null;
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      lastCount = -1; pendings = []; cancelEdit();
+      inputEl.disabled = true; inputEl.value = '';
+      for (const b of composerBtns) b.disabled = true;
+      btnWand.disabled = true;
+      currentTitle = 'Chat'; titleEl.textContent = 'Chat';
+      renderTareaDef();
+      threadEl.innerHTML = '<div class="placeholder">Crea o elige una conversación a la izquierda.</div>';
+      updateSelectionUI();
+      loadList();
+    } else if (active) {
+      lastSig = ''; refreshThread();   // si el origen está abierto, ve volver su plan
+    }
     loadTareas();
+  }
+
+  // Aprobar el PLAN de una tarea (la puerta). Si el plan no es aprobable, el back
+  // devuelve 422 con los motivos: los enseñamos para que se arreglen.
+  async function aprobarPlan(id) {
+    let res, j;
+    try { res = await fetch('/api/tareas/' + id + '/plan/aprobar', { method: 'POST' }); j = await res.json(); }
+    catch { alert('No se pudo aprobar el plan.'); return; }
+    if (res.status === 422) { alert('El plan aún no es aprobable:\n\n• ' + (j.motivos || ['(sin detalle)']).join('\n• ')); return; }
+    if (!res.ok) { alert('No se pudo aprobar el plan: ' + (j.error || 'error')); return; }
+    currentTarea = j; renderTareaDef(); loadTareas();
+  }
+
+  // (Ya no hay "Paralelizar" a mano: el reparto lo decide Aubé en el plan y las
+  //  subtareas se materializan solas. La reorganización tras editar el plan a mano
+  //  será trabajo de "Mamá".)
+
+  // Definir tests (Ana Liz, ciega al código): redacta los tests en papel y los
+  // entrega por su herramienta MCP. Recibe el contexto escrito en la caja (steer).
+  async function definirTests(id) {
+    const t = currentTarea || {};
+    const tid = id || t.id;
+    if (!tid) { alert('Abre una tarea primero.'); return; }
+    let res, j;
+    try {
+      res = await fetch('/api/tareas/' + tid + '/tests/definir', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steer: inputEl.value.trim() }),
+      });
+      j = await res.json();
+    } catch { alert('No se pudo lanzar a Ana Liz.'); return; }
+    if (res.status === 409 && j && j.busy) { alert('Ana Liz ya está trabajando en esta tarea — espera a que termine.'); return; }
+    if (!j || !j.spawned) { alert('No se pudo lanzar a Ana Liz: ' + ((j && j.error) || 'error')); return; }
+    inputEl.value = ''; lastSig = ''; loadTareas(); refreshThread();
+  }
+  const planificarTests = definirTests;   // alias del nombre viejo
+
+  // Escribir tests (Ana Liz, con código): convierte las definiciones en tests reales.
+  async function escribirTests(id) {
+    const tid = id || (currentTarea && currentTarea.id);
+    if (!tid) { alert('Abre una tarea primero.'); return; }
+    let res, j;
+    try {
+      res = await fetch('/api/tareas/' + tid + '/tests/escribir', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steer: inputEl.value.trim() }),
+      });
+      j = await res.json();
+    } catch { alert('No se pudo lanzar a Ana Liz.'); return; }
+    if (res.status === 409) { alert((j && j.error) || 'No se puede ahora.'); return; }
+    if (!j || !j.spawned) { alert('No se pudo: ' + ((j && j.error) || 'error')); return; }
+    inputEl.value = ''; lastSig = ''; loadTareas(); refreshThread();
+  }
+
+  // Probar tests: corre la batería del fichero de la tarea y refleja pasa/falla.
+  async function probarTests(id) {
+    const tid = id || (currentTarea && currentTarea.id);
+    if (!tid) return;
+    loadTareas();   // pinta el ⏳ que el back acaba de poner
+    let j;
+    try { j = await (await fetch('/api/tareas/' + tid + '/tests/probar', { method: 'POST' })).json(); }
+    catch { alert('No se pudo probar.'); return; }
+    if (j && j.ok) alert('Batería: ✓ ' + j.pasa + ' · ✗ ' + j.falla + (j.indet ? ' · ? ' + j.indet : ''));
+    else alert('No se pudo probar: ' + ((j && j.reason) || 'error'));
+    loadTareas();
+  }
+
+  // Completar tarea (el gate): sube a master, corre los tests, borra los temporales.
+  async function completarTarea(id) {
+    const tid = id || (currentTarea && currentTarea.id);
+    if (!tid) return;
+    if (!confirm('¿Completar la tarea?\n\nSe sube a master, se corren los tests y se borran los temporales. La tarea queda cerrada.')) return;
+    let j;
+    try { j = await (await fetch('/api/tareas/' + tid + '/completar', { method: 'POST' })).json(); }
+    catch { alert('No se pudo completar.'); return; }
+    if (j && j.ok) {
+      let msg = '✅ Tarea completada.';
+      if (j.prueba && j.prueba.ok) msg += '\nTests: ✓ ' + j.prueba.pasa + ' · ✗ ' + j.prueba.falla;
+      alert(msg);
+    } else alert('No se pudo completar: ' + ((j && j.error) || 'error'));
+    lastSig = ''; loadTareas(); refreshThread();
+  }
+
+  btnDefinirTests.onclick = () => definirTests();
+  btnEscribirTests.onclick = () => escribirTests();
+
+  // Revisar (Aubé): Aubé reescribe el plan EN EL HILO de la tarea desde la
+  // conversación. Es asíncrono (tarda); cuando TERMINA, el servidor adopta su plan
+  // en la tarea solo (onDone), y el sondeo lo refleja aquí sin que toques nada.
+  async function revisarAube(id) {
+    const t = currentTarea;
+    if (!t || !t.threadId) { alert('Abre la tarea primero (no encuentro su hilo).'); return; }
+    let j;
+    try {
+      j = await (await fetch('/api/chats/' + t.threadId + '/aube', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steer: inputEl.value.trim() }),
+      })).json();
+    } catch { alert('No se pudo lanzar a Aubé.'); return; }
+    if (!j || !j.spawned) { alert('No se pudo lanzar a Aubé: ' + ((j && j.error) || 'error')); return; }
+    inputEl.value = '';
+    lastSig = ''; refreshThread();
   }
 
   async function refreshThread() {
@@ -1250,22 +2176,29 @@
     const chat = await res.json();
     const msgs = chat.messages || [];
     otherCount = msgs.filter((m) => m.author !== 'tie').length;
-    let justArrived = false;
-    if (pending && otherCount > pendingBaseline) { pending = false; justArrived = true; }
+    // retira CADA fantasma solo cuando crece el contador de SU propio autor (llegó
+    // su mensaje oficial). Que hable otro personaje NO toca los demás fantasmas.
+    const llegaron = [];
+    pendings = pendings.filter((p) => {
+      const now = msgs.filter((m) => !m.collapsed && m.author === p.author).length;
+      if (now > p.base) { llegaron.push(p); return false; }
+      return true;
+    });
     // Discutir: al llegar la réplica de Romina/Ariel el rey salta a ella, para
     // que el siguiente Discutir lo coja el otro de la pareja.
-    if (justArrived && selectAfterReply) {
-      const mine = msgs.filter((m) => !m.collapsed && m.author === pendingAuthor);
+    if (selectAfterReplyAuthor && llegaron.some((p) => p.author === selectAfterReplyAuthor)) {
+      const mine = msgs.filter((m) => !m.collapsed && m.author === selectAfterReplyAuthor);
       const real = msgs.filter((m) => !m.collapsed);
       if (mine.length) selectedId = mine[mine.length - 1].id;
       else if (real.length) selectedId = real[real.length - 1].id;
-      selectAfterReply = false;
+      selectAfterReplyAuthor = null;
     }
     const n = msgs.length;
+    const psig = pendingSig();
     const sig = msgs.map((m) =>
       m.id + ':' + (m.text || '').length + ':' + (m.collapsed ? 1 : 0) + ':' + m.replyTo + ':' + (m.editedAt || '')).join('|');
-    if (n !== lastCount || pending !== lastPending || sig !== lastSig) {
-      lastCount = n; lastPending = pending; lastSig = sig; renderThread(chat);
+    if (n !== lastCount || psig !== lastPendingSig || sig !== lastSig) {
+      lastCount = n; lastPendingSig = psig; lastSig = sig; renderThread(chat);
     }
   }
 
@@ -1274,19 +2207,22 @@
   function openChat(id, tarea = null) {
     active = id;
     currentTarea = tarea || null;
-    lastCount = -1; lastPending = false; lastSig = '';
-    pending = false; otherCount = 0; pendingParent = null; pendingAuthor = 'iris';
-    selectedId = null; scope = 'mensaje'; editTarget = null; selectAfterReply = false;
+    lastCount = -1; lastPendingSig = ''; lastSig = '';
+    pendings = []; otherCount = 0;
+    selectedId = null; scope = 'mensaje'; editTarget = null; selectAfterReplyAuthor = null;
     cancelEdit();
     inputEl.disabled = false;
     for (const b of composerBtns) b.disabled = false;
     btnWand.disabled = false;
+    syncTareaBtns();
     updateSelectionUI();
     renderTareaDef();
     refreshThread();
     loadList();
     if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(refreshThread, 1500); // ve llegar las respuestas de los headless
+    // sondeo: ve llegar las respuestas de los headless; y si hay una tarea abierta,
+    // refresca también su ficha (p.ej. el plan que Aubé acaba de adoptar al terminar).
+    pollTimer = setInterval(() => { refreshThread(); if (currentTarea) loadTareas(); }, 1500);
   }
 
   // ── F9b: abrir una tarea (clic en la columna derecha) ────────────────────────
@@ -1303,26 +2239,386 @@
 
   // Pinta (o esconde) el bloque fijo con la definición de la tarea actual.
   function renderTareaDef() {
-    if (!currentTarea) { tareaDefEl.style.display = 'none'; tareaDefEl.innerHTML = ''; return; }
+    editingTareaDef = false;   // pintar la ficha = ya no estamos en modo edición
+    syncTareaBtns();           // el botón "Escribir tests" se habilita si ya hay definidos
+    if (!currentTarea) {
+      tareaDefEl.style.display = 'none'; tareaDefEl.innerHTML = '';
+      tareaActsBarEl.style.display = 'none'; tareaActsBarEl.innerHTML = '';
+      return;
+    }
     const t = currentTarea;
     tareaDefEl.style.display = 'block';
     tareaDefEl.innerHTML = '';
     const eye = document.createElement('div'); eye.className = 'td-eyebrow';
     eye.textContent = 'Tarea #' + t.id;
     const h = document.createElement('h2'); h.textContent = t.title || ('Tarea ' + t.id);
-    const body = document.createElement('div'); body.className = 'td-body'; body.textContent = t.body || '(sin definición todavía)';
+    const body = document.createElement('div'); body.className = 'td-body';
+    if (t.body) fillBubble(body, t.body); else body.textContent = '(sin definición todavía)';
+    // El PASO RECOMENDADO lo decide LA FORJA (forge-estado.pasoRecomendado) y viaja en
+    // `t.next` — así una IA orquestadora lo lee por API igual que el front. Aquí solo
+    // lo pintamos en rosa (y lo callamos si Ana Liz está trabajando).
+    const tests = (t.testsPlan && t.testsPlan.tests) || [];
+    const analizEnCurso = (t.headlessEnCurso || []).includes('analiz');
+    const tieneEscritos = tests.some((x) => x.id && x.estado && x.estado !== 'definido');
+    const seCorrieron = !!(t.testsPlan && t.testsPlan.ultimaCorrida);
+    let next = (t.next && t.next.key) || null;
+    if (analizEnCurso) next = null;                        // si Ana Liz trabaja, no empujes nada
+    const mark = (btn, key) => { if (next === key) btn.classList.add('td-next'); return btn; };
     const acts = document.createElement('div'); acts.className = 'td-acts';
     const edit = document.createElement('button'); edit.className = 'td-btn'; edit.textContent = '✎ Editar definición';
     edit.onclick = startEditTareaDef;
     const rev = document.createElement('button'); rev.className = 'td-btn'; rev.textContent = '✦ Revisar (Aubé)';
-    rev.disabled = true; rev.title = 'Próximamente: Aubé reescribe la definición desde el hilo';
+    rev.title = 'Aubé reescribe el plan en el hilo de la tarea desde la conversación';
+    rev.onclick = () => revisarAube(t.id);
+    mark(rev, 'rev');
     const ejec = document.createElement('button'); ejec.className = 'td-btn'; ejec.textContent = '🔨 Ejecutar';
     ejec.title = 'Miguel construye la tarea en un worktree aislado y reporta en el hilo';
     ejec.onclick = () => ejecutarTarea(t.id);
-    acts.append(edit, ejec, rev);
-    // "Traer el código" YA NO vive aquí: cuelga del informe de Miguel en el hilo
-    // (es de quien construyó), igual que Aprobar cuelga de Aubé.
-    tareaDefEl.append(eye, h, body, acts);
+    mark(ejec, 'ejecutar');
+    acts.append(edit, rev);
+    // aprobar el plan: solo si hay plan y NO está aprobado
+    if (t.plan && !t.plan.aprobado) {
+      const apr = document.createElement('button'); apr.className = 'td-btn'; apr.textContent = '✓ Aprobar plan';
+      apr.title = 'Da el plan por bueno (la puerta antes de paralelizar/construir)';
+      apr.onclick = () => aprobarPlan(t.id);
+      acts.append(mark(apr, 'aprobar'));
+    }
+    // con el plan aprobado: definir tests. (El reparto en paralelo ya lo hizo Aubé en
+    // el plan → las subtareas salen solas, sin botón "Paralelizar".)
+    if (t.plan && t.plan.aprobado) {
+      const complejidad = complejidadDe(t);
+      const hayPendientesEscribir = tests.some((x) => (x.estado || 'definido') === 'definido');
+      const pt = document.createElement('button'); pt.className = 'td-btn';
+      if (complejidad === 'facil') {
+        // FÁCIL: Ana Liz no define. El botón se queda bloqueado; se añaden a mano.
+        pt.textContent = '🎯 Definir tests'; pt.disabled = true;
+        pt.title = 'Tarea fácil: Ana Liz no define tests. Usa "+ Añadir test" para ponerlos a mano.';
+      } else if (analizEnCurso) {
+        pt.textContent = '⏳ Ana Liz trabajando…'; pt.disabled = true;
+        pt.title = 'Ana Liz está trabajando; espera a que termine';
+      } else {
+        pt.textContent = tests.length ? '🎯 Redefinir tests' : '🎯 Definir tests (Ana Liz)';
+        pt.title = complejidad === 'mediana'
+          ? 'Ana Liz define una batería mínima (camino feliz + bordes críticos)'
+          : 'Ana Liz define los tests en papel: generales y por subtarea';
+        pt.onclick = () => definirTests(t.id);
+        mark(pt, 'definir');
+      }
+      acts.append(pt);
+      // escribir tests reales: SOLO si hay definiciones PENDIENTES de escribir (sea cual
+      // sea el nivel, incl. los añadidos a mano en una tarea fácil) y nadie trabajando.
+      if (hayPendientesEscribir && !analizEnCurso) {
+        const wr = document.createElement('button'); wr.className = 'td-btn'; wr.textContent = '⌨️ Escribir tests';
+        wr.title = 'Ana Liz convierte las definiciones pendientes en tests de código (con su ID)';
+        wr.onclick = () => escribirTests(t.id);
+        acts.append(mark(wr, 'escribir'));
+      }
+      // añadir un test A MANO (funciona en cualquier nivel; la única vía en "fácil").
+      const add = document.createElement('button'); add.className = 'td-btn'; add.textContent = '+ Añadir test';
+      add.title = 'Añade un test a mano (a dónde va y si es temporal o permanente)';
+      add.onclick = () => openTestModal(null);
+      acts.append(add);
+    }
+    acts.append(ejec);
+    // probar la batería: SOLO cuando ya hay tests escritos (estado más allá de "definido").
+    if (tieneEscritos) {
+      const pr = document.createElement('button'); pr.className = 'td-btn'; pr.textContent = '▶ Probar tests';
+      pr.title = 'Corre la batería de esta tarea y refleja pasa/falla';
+      pr.onclick = () => probarTests(t.id);
+      acts.append(mark(pr, 'probar'));
+    }
+    // COMPLETAR (el gate): aparece SOLO tras EJECUTAR los tests (haya pasado o fallado),
+    // señal = testsPlan.ultimaCorrida. Si la tarea no tiene tests con código, no hay nada
+    // que correr → se permite completar directamente. Sube a master + borra temporales.
+    if (t.builtAt && !t.enMaster && (seCorrieron || !tieneEscritos)) {
+      const cp = document.createElement('button'); cp.className = 'td-btn'; cp.textContent = '✅ Completar tarea';
+      cp.title = 'Sube a master, corre los tests y borra los temporales. La tarea queda cerrada.';
+      cp.onclick = () => completarTarea(t.id);
+      mark(cp, 'completar');
+      acts.append(cp);
+    }
+    // SUBIR A MASTER (el reintento manual del auto-merge): antes solo colgaba del
+    // informe de Miguel en el hilo y se perdía con el scroll. Ahora vive en la barra
+    // fija, siempre a la vista. Su estado (habilitado / por qué no) lo dice el back.
+    if (t.builtAt && !t.enMaster) {
+      const sm = document.createElement('button'); sm.className = 'td-btn'; sm.textContent = '⬇ Subir a master';
+      sm.disabled = true; sm.title = 'Comprobando…';
+      sm.onclick = () => traerTarea(t.id);
+      acts.append(sm);
+      fetch('/api/tareas/' + t.id + '/traible').then((r) => r.json()).then((s) => {
+        sm.disabled = !s.traible;
+        sm.title = s.traible ? 'Trae todo el arbolito del worktree y lo sube a master (commit)'
+          : s.reason === 'ya en master' ? 'Ya está en master ✓'
+          : s.reason === 'construyendo' ? 'Miguel sigue construyendo — espera a que termine'
+          : s.reason === 'build interrumpido' ? 'El build se interrumpió — vuelve a lanzar a Miguel'
+          : 'Nada que subir';
+      }).catch(() => {});
+    }
+    // "Traer el código" YA NO cuelga del informe de Miguel en el hilo: vive arriba,
+    // en la barra fija (botón "Subir a master"), igual que el resto de acciones.
+    // El LINK ORIGEN abre la cabecera: de qué conversación —o de qué tarea— nació.
+    // Se resuelve en vivo en el back (renombrar la fuente lo renombra; borrarla lo
+    // hace null → no se pinta).
+    if (t.origen) {
+      const orig = document.createElement('div'); orig.className = 'td-origen';
+      const a = document.createElement('a');
+      a.textContent = '↰ ' + (t.origen.kind === 'tarea' ? 'Tarea: ' : 'Conversación: ') + t.origen.title;
+      a.title = 'Abrir el origen de esta tarea';
+      a.onclick = () => { if (t.origen.kind === 'tarea') openTarea(t.origen.id); else openChat(t.origen.id); };
+      orig.appendChild(a);
+      tareaDefEl.append(orig);
+    }
+    tareaDefEl.append(eye, h, body);
+    if (t.plan) tareaDefEl.append(renderPlanBlock(t.plan, { hidePartes: (t.subtareas || []).length > 0 }));
+    tareaDefEl.append(renderComplejidadRow(t));
+    const struct = renderStructureBlock(t);
+    if (struct) tareaDefEl.append(struct);
+    // las acciones NO van en el bloque que scrollea: viven en la barra fija del
+    // composer, siempre a la vista encima del input.
+    tareaActsBarEl.innerHTML = '';
+    tareaActsBarEl.append(acts);
+    tareaActsBarEl.style.display = 'block';
+  }
+
+  // La complejidad EFECTIVA de una tarea: el override de Tie (t.complejidad) manda
+  // sobre la de Aubé (t.plan.complejidad). Sin ninguna → compleja (default seguro).
+  const COMPLEJ = [['facil', 'fácil'], ['mediana', 'mediana'], ['compleja', 'compleja']];
+  function complejidadDe(t) {
+    if (t && t.complejidad) return t.complejidad;
+    if (t && t.plan && t.plan.complejidad) return t.plan.complejidad;
+    return 'compleja';
+  }
+  // Fila de complejidad: segmentado fácil/mediana/compleja. Clic = override de Tie
+  // (manda sobre la de Aubé). Gobierna los tests: fácil bloquea a Ana Liz.
+  function renderComplejidadRow(t) {
+    const row = document.createElement('div'); row.className = 'td-complej';
+    const lbl = document.createElement('span'); lbl.className = 'tc-lbl'; lbl.textContent = 'Complejidad';
+    const seg = document.createElement('div'); seg.className = 'tc-seg';
+    const efectiva = complejidadDe(t);
+    for (const [val, txt] of COMPLEJ) {
+      const b = document.createElement('button'); b.textContent = txt;
+      if (val === efectiva) b.classList.add('active');
+      b.title = val === 'facil' ? 'Ana Liz no define tests (los pones a mano)'
+        : val === 'mediana' ? 'Ana Liz genera una batería mínima'
+        : 'Ana Liz a fondo (cobertura completa)';
+      b.onclick = async () => {
+        try {
+          const r = await fetch('/api/tareas/' + t.id + '/complejidad', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nivel: val }),
+          });
+          if (!r.ok) throw new Error('error');
+          loadTareas();
+        } catch { alert('No se pudo cambiar la complejidad.'); }
+      };
+      seg.append(b);
+    }
+    row.append(lbl, seg);
+    // de dónde viene la etiqueta vigente (Aubé / tú)
+    const org = document.createElement('span'); org.className = 'tc-origen';
+    org.textContent = (t.complejidad) ? '(la fijaste tú)' : (t.plan && t.plan.complejidad) ? '(la puso Aubé)' : '(por defecto)';
+    row.append(org);
+    return row;
+  }
+
+  // El dibujo de Tie: la estructura de la tarea = tests generales + cada subtarea
+  // con su alcance y sus tests colgando. `t.subtareas` (de Paralelizar) y
+  // `t.testsPlan.tests` (de Ana Liz, cada uno con su `ref`: 'general' o el name).
+  function renderStructureBlock(t) {
+    const tests = (t.testsPlan && Array.isArray(t.testsPlan.tests)) ? t.testsPlan.tests : [];
+    const subs = (t.subtareas || []);
+    if (!subs.length && !tests.length) return null;   // todavía no hay nada que mostrar
+    // cada test recuerda su índice GLOBAL (para patch/borrar) y la tarea a la que va.
+    const byRef = {};
+    tests.forEach((x, i) => { const e = { ...x, _i: i }; (byRef[x.ref] = byRef[x.ref] || []).push(e); });
+    const box = document.createElement('div'); box.className = 'td-struct';
+
+    // tests generales (de la tarea entera)
+    const genH = document.createElement('div'); genH.className = 'st-h'; genH.textContent = 'Tests generales';
+    box.append(genH);
+    appendTests(box, byRef['general'] || []);
+
+    // cada subtarea: nombre + alcance + sus tests
+    for (const s of subs) {
+      const sd = document.createElement('div'); sd.className = 'st-sub';
+      const nm = document.createElement('div'); nm.className = 'st-name'; nm.textContent = '▸ ' + s.name;
+      const al = document.createElement('div'); al.className = 'st-alcance';
+      const arch = (s.alcance && s.alcance.archivos || []).join(', ');
+      al.textContent = arch + (s.alcance && s.alcance.frontera ? ' — ' + s.alcance.frontera : '');
+      sd.append(nm, al); box.append(sd);
+      appendTests(box, byRef[s.name] || []);
+    }
+    if (!tests.length) {
+      const e = document.createElement('div'); e.className = 'st-empty';
+      e.textContent = (t.headlessEnCurso || []).includes('analiz')
+        ? '🎯 Ana Liz está redactando los tests…'
+        : 'Aún no hay tests — pulsa "🎯 Definir tests".';
+      box.append(e);
+    }
+    return box;
+  }
+
+  // Quita de una burbuja los bloques que lee SOLO la máquina (```plan```, ```tests```,
+  // ```subtareas```): su versión humanizada ya vive en la ficha de la tarea. Así el
+  // chat no vuelca JSON crudo. El texto guardado NO se toca (esto es solo al pintar).
+  function stripMachineBlocks(text) {
+    let s = String(text == null ? '' : text);
+    s = s.replace(/```(?:plan|tests|subtareas)\s*[\s\S]*?```/gi, '');
+    return s.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  // El icono del ESTADO de un test (su ciclo de vida).
+  const TEST_ESTADO_ICON = { definido: '📝', escrito: '☐', ejecutando: '⏳', pasa: '✓', falla: '✗' };
+  const TEST_ESTADO_TXT = {
+    definido: 'Definido (en papel)', escrito: 'Escrito en código',
+    ejecutando: 'Ejecutando…', pasa: 'Pasa ✓', falla: 'Falla ✗',
+  };
+
+  // Pinta una lista de tests: icono de ESTADO + nivel + título. Clic → modal de edición.
+  function appendTests(box, tests) {
+    const wrap = document.createElement('div'); wrap.className = 'st-tests';
+    if (!tests.length) {
+      const e = document.createElement('div'); e.className = 'st-empty'; e.textContent = '(sin tests)';
+      wrap.append(e); box.append(wrap); return;
+    }
+    for (const t of tests) {
+      const d = document.createElement('div'); d.className = 'st-test st-clickable';
+      // icono de ESTADO (📝 definido → ☐ escrito → ⏳ → ✓/✗)
+      const est = t.estado || 'definido';
+      const ico = document.createElement('span'); ico.className = 'st-estado st-est-' + est;
+      ico.textContent = TEST_ESTADO_ICON[est] || '📝'; ico.title = TEST_ESTADO_TXT[est] || est;
+      // marca de nivel: persistente (se queda) vs temporal (efímero)
+      const perm = t.nivel === 'persistente';
+      const niv = document.createElement('span'); niv.className = 'st-nivel ' + (perm ? 'st-perm' : 'st-impl');
+      niv.textContent = perm ? '♾' : '✎';
+      niv.title = perm ? 'Persistente: se queda como regresión' : 'Temporal: se borra al completar la tarea';
+      const tit = document.createElement('span'); tit.className = 'st-tit'; tit.textContent = t.titulo;
+      d.append(ico, niv, document.createTextNode(' '), tit);
+      const det = [t.dado && ('Dado ' + t.dado), t.cuando && ('cuando ' + t.cuando), t.entonces && ('entonces ' + t.entonces)].filter(Boolean).join(' · ');
+      if (det) d.title = det;
+      d.onclick = () => openTestModal(t);
+      wrap.append(d);
+    }
+    box.append(wrap);
+  }
+
+  // Modal de edición de UN test (clic en su fila). Edita textos, promueve (general ↔
+  // subtarea), cambia el tipo (temporal/persistente) y borra. `t._i` = índice global.
+  function openTestModal(t) {
+    const tarea = currentTarea; if (!tarea) return;
+    const isNew = (t == null);          // null = AÑADIR un test nuevo a mano
+    if (isNew) t = { titulo: '', dado: '', cuando: '', entonces: '', ref: 'general', nivel: 'temporal' };
+    const i = t._i;
+    let modal = document.getElementById('test-modal');
+    if (!modal) {
+      modal = document.createElement('div'); modal.id = 'test-modal'; modal.className = 'perm-modal';
+      const box = document.createElement('div'); box.className = 'perm-box'; box.onclick = (e) => e.stopPropagation();
+      modal.appendChild(box); modal.onclick = () => modal.remove();
+      document.body.appendChild(modal);
+    } else { modal.querySelector('.perm-box').innerHTML = ''; }
+    const box = modal.querySelector('.perm-box');
+    const h = document.createElement('h3'); h.textContent = isNew ? 'Añadir test' : ('Editar test' + (t.id ? ' · ' + t.id : ''));
+    box.appendChild(h);
+    const field = (label, val, ta) => {
+      const w = document.createElement('div'); w.className = 'tm-field';
+      const l = document.createElement('label'); l.textContent = label; w.appendChild(l);
+      const el = document.createElement(ta ? 'textarea' : 'input'); el.className = 'tm-in'; el.value = val || '';
+      w.appendChild(el); box.appendChild(w); return el;
+    };
+    const titIn = field('Título', t.titulo);
+    const dadoIn = field('Dado', t.dado, true);
+    const cuandoIn = field('Cuando', t.cuando, true);
+    const entoIn = field('Entonces', t.entonces, true);
+    // ref (general o subtarea) + nivel
+    const row = document.createElement('div'); row.className = 'tm-row';
+    const refSel = document.createElement('select'); refSel.className = 'tm-sel';
+    const refs = ['general', ...((tarea.subtareas || []).map((s) => s.name).filter(Boolean))];
+    for (const r of refs) { const o = document.createElement('option'); o.value = r; o.textContent = r === 'general' ? 'General' : r; refSel.appendChild(o); }
+    refSel.value = refs.includes(t.ref) ? t.ref : 'general';
+    const nivSel = document.createElement('select'); nivSel.className = 'tm-sel';
+    for (const [v, lab] of [['temporal', 'Temporal (se borra al completar)'], ['persistente', 'Persistente (regresión)']]) {
+      const o = document.createElement('option'); o.value = v; o.textContent = lab; nivSel.appendChild(o);
+    }
+    nivSel.value = t.nivel === 'persistente' ? 'persistente' : 'temporal';
+    const rl = document.createElement('span'); rl.className = 'tm-lbl'; rl.textContent = 'Cuelga de';
+    const nl = document.createElement('span'); nl.className = 'tm-lbl'; nl.textContent = 'Tipo';
+    row.append(rl, refSel, nl, nivSel); box.appendChild(row);
+    // acciones
+    const acts = document.createElement('div'); acts.className = 'perm-acts';
+    const save = document.createElement('button'); save.className = 'team-btn primary'; save.textContent = isNew ? 'Añadir' : 'Guardar';
+    const cancel = document.createElement('button'); cancel.className = 'team-btn'; cancel.textContent = 'Cancelar';
+    acts.append(save);
+    // borrar: solo al EDITAR uno existente (no al añadir).
+    if (!isNew) {
+      const del = document.createElement('button'); del.className = 'team-btn tm-del'; del.textContent = '🗑 Borrar';
+      del.onclick = async () => {
+        if (!confirm('¿Borrar este test?')) return;
+        try {
+          const r = await fetch('/api/tareas/' + tarea.id + '/tests/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index: i }),
+          });
+          if (!r.ok) throw new Error('error');
+          modal.remove(); loadTareas();
+        } catch { alert('No se pudo borrar.'); }
+      };
+      acts.append(del);
+    }
+    acts.append(cancel); box.appendChild(acts);
+    cancel.onclick = () => modal.remove();
+    save.onclick = async () => {
+      if (isNew && !titIn.value.trim()) { alert('El test necesita al menos un título.'); return; }
+      save.classList.add('busy'); save.disabled = true;
+      const fields = { titulo: titIn.value, dado: dadoIn.value, cuando: cuandoIn.value, entonces: entoIn.value, ref: refSel.value, nivel: nivSel.value };
+      try {
+        const url = isNew ? '/api/tareas/' + tarea.id + '/tests/add' : '/api/tareas/' + tarea.id + '/tests/patch';
+        const body = isNew ? { fields } : { index: i, fields };
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!r.ok) throw new Error('error');
+        modal.remove(); loadTareas();
+      } catch (e) { alert('No se pudo guardar.'); save.classList.remove('busy'); save.disabled = false; }
+    };
+    modal.style.display = 'flex';
+  }
+
+  // Pinta el PLAN estructurado de Aubé: resumen + partes (qué hace / qué ficheros)
+  // + contrato (la interfaz entre partes) + si está aprobado o no.
+  function renderPlanBlock(plan, opts = {}) {
+    const box = document.createElement('div'); box.className = 'td-plan';
+    if (plan.resumen) {
+      const r = document.createElement('div'); r.className = 'tp-resumen'; fillBubble(r, plan.resumen);
+      box.append(r);
+    }
+    // Una vez paralelizado, las partes ya salen abajo (subtareas con alcance + tests):
+    // no las repitas aquí. Antes de paralelizar SÍ se muestran (son la propuesta).
+    if (!opts.hidePartes && (plan.partes || []).length) {
+      const hh = document.createElement('div'); hh.className = 'tp-h'; hh.textContent = 'Partes'; box.append(hh);
+      for (const p of plan.partes) {
+        const d = document.createElement('div'); d.className = 'tp-parte md-rendered';
+        const b = document.createElement('b'); b.textContent = p.name; d.append(b);
+        d.append(document.createTextNode(' — '));
+        const hace = document.createElement('span'); inlineBlock(hace, p.hace || ''); d.append(hace);
+        if (p.ficheros && p.ficheros.length) {
+          const f = document.createElement('span'); f.className = 'tp-files';
+          f.textContent = ' (' + p.ficheros.join(', ') + ')'; d.append(f);
+        }
+        box.append(d);
+      }
+    }
+    if ((plan.contrato || []).length) {
+      const hh = document.createElement('div'); hh.className = 'tp-h'; hh.textContent = 'Contrato entre partes'; box.append(hh);
+      for (const c of plan.contrato) {
+        const d = document.createElement('div'); d.className = 'tp-contrato md-rendered';
+        const b = document.createElement('b'); b.textContent = (c.entre || []).join(' ↔ '); d.append(b);
+        d.append(document.createTextNode(': '));
+        const iface = document.createElement('span'); iface.className = 'tp-iface'; inlineBlock(iface, c.interfaz || ''); d.append(iface);
+        if (c.acuerdo) { d.append(document.createElement('br')); const ac = document.createElement('span'); inlineBlock(ac, c.acuerdo); d.append(ac); }
+        box.append(d);
+      }
+    }
+    const est = document.createElement('div'); est.className = 'tp-estado';
+    if (plan.aprobado) { est.classList.add('tp-aprobado'); est.textContent = '✓ Plan aprobado'; }
+    else { est.classList.add('tp-pendiente'); est.textContent = '○ Plan sin aprobar'; }
+    box.append(est);
+    return box;
   }
 
   // Subir a master: trae TODO el arbolito (commits de la rama + cambios sueltos) al
@@ -1343,13 +2639,14 @@
 
   // Ejecutar: lanza a Miguel a construir la tarea (worktree aislado). Reporta en el hilo.
   async function ejecutarTarea(id) {
-    if (!confirm('¿Ejecutar la tarea?\n\nMiguel la construye en una copia aislada (worktree), sin tocar el árbol vivo, y reporta aquí cuando termine (tarda un rato).')) return;
-    let j;
+    let res, j;
     try {
-      j = await (await fetch('/api/tareas/' + id + '/ejecutar', {
+      res = await fetch('/api/tareas/' + id + '/ejecutar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ steer: inputEl.value.trim() }),
-      })).json();
+      });
+      if (await apagadoEnCurso(res, () => ejecutarTarea(id))) return;
+      j = await res.json();
     } catch { alert('No se pudo ejecutar.'); return; }
     if (!j || !j.spawned) { alert('No se pudo ejecutar: ' + ((j && j.error) || 'error')); return; }
     inputEl.value = '';
@@ -1361,6 +2658,7 @@
   // Edición a mano de la definición: cambia título/cuerpo por campos editables.
   function startEditTareaDef() {
     if (!currentTarea) return;
+    editingTareaDef = true;    // no dejes que el sondeo re-pinte y borre lo que escribes
     const t = currentTarea;
     tareaDefEl.innerHTML = '';
     const eye = document.createElement('div'); eye.className = 'td-eyebrow'; eye.textContent = 'Editando tarea #' + t.id;
@@ -1410,6 +2708,28 @@
     a.btn.onclick = () => { setDefaultAction(k); a.run(); };
   }
   setDefaultAction(defaultAction); // pinta el defecto al cargar
+
+  // Debug: NO es una acción por defecto (no se la queda Enter). Vuelca en la consola
+  // el texto ensamblado para el alcance elegido — el hilo + el foco, que es la parte
+  // que cambia con el scope — sin lanzar a ningún personaje.
+  btnDebug.onclick = debugFoco;
+  async function debugFoco() {
+    if (!active) return;
+    const targetId = actionTarget();
+    let res, j;
+    try {
+      res = await fetch('/api/chats/' + active + '/debug-foco', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetId, scope }),
+      });
+      j = await res.json();
+    } catch (e) { console.error('[forge debug] no se pudo pedir el foco:', e); return; }
+    if (!res.ok) { console.warn('[forge debug] error:', (j && j.error) || res.status); return; }
+    console.log('%c═══ DEBUG forge · alcance "' + j.scope + '" · target #' + j.targetId + ' ═══',
+      'color:#ff0066;font-weight:bold');
+    console.log('── HILO (threadText, igual en todos los alcances) ──\n' + j.threadText);
+    console.log('── FOCO (focoText, CAMBIA con el alcance) ──\n' + j.focoText);
+  }
 
   // ── doble modo de envío + autocrecer ────────────────────────────────────────
   // El área crece sola con el texto hasta 10 líneas y luego hace scroll. El modo
@@ -1490,6 +2810,19 @@
     currentTitle = j.chat.title;
     titleEl.textContent = currentTitle;
     loadList();
+    // Si estamos DENTRO de una tarea, el título de arriba ES, para Tie, el de la
+    // tarea: renómbrala también para que la lista de la derecha lo refleje (antes
+    // solo cambiaba la conversación y la tarea se quedaba con el nombre viejo).
+    if (currentTarea) {
+      try {
+        const upd = await (await fetch('/api/tareas/' + currentTarea.id + '/definicion', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title }),
+        })).json();
+        currentTarea = { ...currentTarea, ...upd };
+        renderTareaDef(); loadTareas();
+      } catch { /* el título de la conversación ya cambió; la tarea es best-effort */ }
+    }
   }
 
   titleEl.addEventListener('click', () => {
@@ -1530,22 +2863,19 @@
     btnWand.disabled = false;
   };
 
-  // ── la PUERTA-parada de entrada del carril: abre un popover de ajustes ──────
-  // Clic fuera la cierra. NO es un botón de acción. (La salida "Cierre" ya no es
-  // una puerta: es la última fase del recorrido, se navega con las flechas.)
-  const popNew = document.getElementById('popNew');
-  function closeGates() { popNew.classList.remove('open'); }
-  function toggleGate(pop) {
-    const willOpen = !pop.classList.contains('open');
-    closeGates();
-    if (willOpen) pop.classList.add('open');
+  // ── "Nuevo ciclo" como ESTADO (ya no un popover) ────────────────────────────
+  // La parada del carril ENTRA en el estado: su panel (objetivo + rama + empezar)
+  // cubre el centro hasta que empiezas el ciclo o cancelas.
+  const ncView = document.getElementById('nuevoCicloView');
+  const gateNewBtn = document.getElementById('gateNewBtn');
+  function showNuevoCiclo(on) {
+    ncView.style.display = on ? 'flex' : 'none';
+    gateNewBtn.classList.toggle('active', on);
   }
-  document.getElementById('gateNewBtn').onclick = (e) => { e.stopPropagation(); syncNewGate(); toggleGate(popNew); };
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.gate')) closeGates();
-  });
+  gateNewBtn.onclick = (e) => { e.stopPropagation(); syncNewGate(); showNuevoCiclo(true); };
+  document.getElementById('newCancel').onclick = () => showNuevoCiclo(false);
 
-  // Ajustes dentro de "Nuevo ciclo": objetivo (forge/producto) + nombre de rama.
+  // Ajustes del estado "Nuevo ciclo": objetivo (forge/producto) + nombre de rama.
   const newTargetSeg = document.getElementById('newTargetSeg');
   const newBranch = document.getElementById('newBranch');
   let newTargetChoice = (cycle && cycle.target) || 'forge';
@@ -1584,11 +2914,11 @@
     }
     if (!res.ok) { alert('No se pudo empezar el ciclo.'); return; }
     const j = await res.json();
-    closeGates();
+    showNuevoCiclo(false);
     loadCycle();           // el ciclo vuelve a Spike: refresca el carril
     await loadList();
     openChat(j.chat.id);
-    pending = true; pendingBaseline = 0; pendingParent = null; pendingAuthor = 'iris';
+    addPending('iris', null);
     lastSig = ''; refreshThread();
   };
 
@@ -1632,42 +2962,198 @@
   };
   applyRightState();
 
-  // ── selector de modelo (global: aplica a TODOS los headless) ────────────────
-  const modelPickerEl = document.getElementById('modelPicker');
-  async function loadModel() {
-    try {
-      const res = await fetch('/api/model');
-      if (!res.ok) throw new Error('no model');
-      const { model, choices } = await res.json();
-      modelPickerEl.innerHTML = '';
-      (choices || []).forEach((c) => {
-        const opt = document.createElement('option');
-        opt.value = c.value; opt.textContent = c.label;
-        if (c.value === (model || '')) opt.selected = true;
-        modelPickerEl.appendChild(opt);
-      });
-      modelPickerEl.disabled = false;
-    } catch {
-      // si la forja aún no expone /api/model, apaga el selector (sin sorpresas).
-      modelPickerEl.innerHTML = '<option>—</option>';
-      modelPickerEl.disabled = true;
+  // (El selector de modelo GLOBAL se retiró: cada empleado lleva su propio modelo en
+  // su perfil — 👥 Equipo. Lo que quede sin fijar hereda el default del CLI.)
+
+  // ── uso de la suscripción (ventana de 5h) ───────────────────────────────────
+  // El servidor cachea 5 min; aquí sondeamos cada 4 min (cualquier pestaña pega al
+  // caché del servidor, nunca al endpoint real más de una vez por ventana).
+  const usageChipEl = document.getElementById('usageChip');
+  let lastUsage = null;
+  usageChipEl.onclick = () => { if (lastUsage && lastUsage.available) openUsageModal(); };
+
+  // "2h 14m" / "14m" / "—" desde un ISO de reset.
+  function timeLeft(iso) {
+    if (!iso) return '—';
+    let ms; try { ms = new Date(iso).getTime() - Date.now(); } catch { return '—'; }
+    if (!(ms > 0)) return '0m';
+    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    return h ? (h + 'h ' + m + 'm') : (m + 'm');
+  }
+  function sev(pct) { return pct >= 95 ? 'danger' : (pct >= 80 ? 'warn' : ''); }
+
+  async function loadUsage() {
+    let u;
+    try { u = await (await fetch('/api/usage')).json(); } catch { u = null; }
+    lastUsage = u;
+    const off = () => {
+      usageChipEl.className = 'usage-chip off';
+      usageChipEl.innerHTML = '<span class="uc-lbl">5h</span><span class="uc-meta">—</span>';
+      usageChipEl.title = (u && u.reason) ? ('Uso 5h: ' + u.reason) : 'Uso de la ventana de 5h (sin datos)';
+    };
+    if (!u || !u.available || !u.primary || u.primary.usedPercent == null) { off(); return; }
+    const pct = Math.round(Number(u.primary.usedPercent));
+    const tl = timeLeft(u.primary.resetsAt);
+    usageChipEl.className = 'usage-chip ' + sev(pct);
+    usageChipEl.innerHTML = '<span class="uc-lbl">5h</span>'
+      + '<span class="uc-bar"><span class="uc-fill"></span></span>'
+      + '<span class="uc-meta">' + pct + '% · ' + tl + (u.stale ? ' ~' : '') + '</span>';
+    usageChipEl.querySelector('.uc-fill').style.width = Math.min(100, pct) + '%';
+    usageChipEl.title = 'Uso de la ventana de 5h' + (u.stale ? ' (dato cacheado)' : '') + ' — clic para el desglose';
+  }
+
+  function umWindow(name, w) {
+    if (!w) return null;
+    const pct = (w.utilization != null) ? Math.round(Number(w.utilization)) : (w.usedPercent != null ? Math.round(Number(w.usedPercent)) : null);
+    if (pct == null) return null;
+    const reset = w.resets_at || w.resetsAt || null;
+    const el = document.createElement('div'); el.className = 'um-win';
+    const head = document.createElement('div'); head.className = 'um-win-head';
+    const nm = document.createElement('span'); nm.className = 'um-win-name'; nm.textContent = name;
+    const p = document.createElement('span'); p.className = 'um-win-pct'; p.textContent = pct + '%';
+    head.appendChild(nm); head.appendChild(p);
+    const bar = document.createElement('div'); bar.className = 'um-win-bar';
+    const fill = document.createElement('span'); fill.className = 'um-win-fill ' + sev(pct); fill.style.width = Math.min(100, pct) + '%';
+    bar.appendChild(fill);
+    const sub = document.createElement('div'); sub.className = 'um-win-sub';
+    let resetTxt = '';
+    if (reset) { try { resetTxt = new Date(reset).toLocaleString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' }); } catch {} }
+    sub.textContent = 'quedan ' + timeLeft(reset) + (resetTxt ? ' · reset ' + resetTxt : '');
+    el.appendChild(head); el.appendChild(bar); el.appendChild(sub);
+    return el;
+  }
+
+  function openUsageModal() {
+    const raw = (lastUsage && lastUsage.raw) || {};
+    let modal = document.getElementById('usage-modal');
+    if (!modal) {
+      modal = document.createElement('div'); modal.id = 'usage-modal'; modal.className = 'usage-modal';
+      const box = document.createElement('div'); box.className = 'usage-box'; box.onclick = (e) => e.stopPropagation();
+      modal.appendChild(box); modal.onclick = () => { modal.style.display = 'none'; };
+      document.body.appendChild(modal);
+    }
+    const box = modal.querySelector('.usage-box');
+    box.innerHTML = '';
+    const h = document.createElement('h3'); h.textContent = 'Uso de tu suscripción';
+    const x = document.createElement('button'); x.className = 'um-x'; x.textContent = '✕';
+    x.onclick = () => { modal.style.display = 'none'; };
+    h.appendChild(x); box.appendChild(h);
+    const wins = [
+      ['Ventana de 5 horas', raw.five_hour],
+      ['Semana (7 días)', raw.seven_day],
+      ['Semana · Opus', raw.seven_day_opus],
+      ['Semana · Sonnet', raw.seven_day_sonnet],
+    ];
+    let any = false;
+    for (const [name, w] of wins) { const el = umWindow(name, w); if (el) { box.appendChild(el); any = true; } }
+    const ex = raw.extra_usage;
+    if (ex && ex.is_enabled) {
+      const d = document.createElement('div'); d.className = 'um-win-sub';
+      d.textContent = 'Uso extra: ' + (ex.utilization != null ? Math.round(ex.utilization) + '%' : 'activado') + (ex.monthly_limit ? ' de ' + ex.monthly_limit : '');
+      box.appendChild(d); any = true;
+    }
+    if (!any) { const d = document.createElement('div'); d.className = 'um-win-sub'; d.textContent = '(sin datos de ventanas)'; box.appendChild(d); }
+    if (lastUsage && lastUsage.stale) { const s = document.createElement('div'); s.className = 'um-stale'; s.textContent = '⚠️ dato cacheado (el endpoint estaba rate-limited)'; box.appendChild(s); }
+    modal.style.display = 'flex';
+  }
+
+  // ── estado de la forja: lucecita + contador de claudes + apagado ordenado ────
+  const forgeStatusEl = document.getElementById('forgeStatus');
+  const btnRestart = document.getElementById('btnRestart');
+  let esperandoReinicio = false;   // la UI ya pidió el reinicio y espera el drenaje
+  let avisoReinicio = null;        // el aviso flotante "la forja se está reiniciando…"
+
+  function plural(n) { return n === 1 ? '' : 's'; }
+
+  // Aviso flotante de reinicio en curso (un solo elemento; se reutiliza/actualiza).
+  function mostrarAvisoReinicio(msg) {
+    if (!avisoReinicio) {
+      avisoReinicio = document.createElement('div');
+      avisoReinicio.className = 'forge-reinicio-aviso';
+      avisoReinicio.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);'
+        + 'z-index:1300;background:#2a2118;color:#e0a23a;border:1px solid rgba(224,162,58,.5);'
+        + 'border-radius:10px;padding:10px 16px;font-size:13px;box-shadow:0 4px 18px rgba(0,0,0,.4);';
+      document.body.appendChild(avisoReinicio);
+    }
+    avisoReinicio.textContent = '⟳ ' + msg;
+  }
+  function ocultarAvisoReinicio() {
+    if (avisoReinicio) { avisoReinicio.remove(); avisoReinicio = null; }
+  }
+
+  // Pinta la lucecita y el contador 🤖 N desde el status en vivo. st===null => el
+  // servidor no respondió => desconectada (no nos quedamos en el último estado bueno).
+  function pintarForgeStatus(st) {
+    if (!st) {
+      forgeStatusEl.className = 'forge-status down';
+      forgeStatusEl.textContent = '🔴 desconectada — reinicio manual';
+      return;
+    }
+    const n = Number(st.agentes) || 0;
+    const bots = '🤖 ' + n;
+    if (st.reiniciada) {
+      forgeStatusEl.className = 'forge-status down';
+      forgeStatusEl.textContent = '🔴 desconectada — reinicio manual';
+    } else if (st.apagandose) {
+      forgeStatusEl.className = 'forge-status draining';
+      forgeStatusEl.textContent = '🟡 apagándose · ' + bots + ' claude' + plural(n);
+    } else {
+      forgeStatusEl.className = 'forge-status on';
+      forgeStatusEl.textContent = '🟢 encendida · ' + bots;
     }
   }
-  modelPickerEl.onchange = async () => {
+
+  // Sonda propia (independiente del pollTimer del chat): pega a /api/forge/status
+  // cada ~3s en marcha normal y baja a ~1/min cuando esperamos el reinicio.
+  let forgePollTick = 0;
+  async function pollForgeStatus() {
+    forgePollTick++;
+    if (esperandoReinicio && (forgePollTick % 20 !== 0)) return;   // ~1/min en espera
+    let st;
     try {
-      const res = await fetch('/api/model', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: modelPickerEl.value }),
-      });
-      if (!res.ok) throw new Error('save failed');
-    } catch { alert('No se pudo guardar el modelo.'); }
+      const r = await fetch('/api/forge/status');
+      if (r.ok) st = await r.json(); else st = null;
+    } catch { st = null; }
+    pintarForgeStatus(st);
+    // la forja volvió a marcha normal (reinicio manual hecho): salimos de la espera.
+    if (st && !st.apagandose && esperandoReinicio) {
+      esperandoReinicio = false;
+      ocultarAvisoReinicio();
+    }
+  }
+
+  // Guardián del 503 'shutting down': si una acción que lanza trabajo cae mientras
+  // la forja drena, NO es un fallo normal — avisamos y reprogramamos esa MISMA
+  // acción cada 60s hasta que la forja vuelva. Devuelve true si lo gestionó.
+  async function apagadoEnCurso(res, reintentar) {
+    if (!res || res.status !== 503) return false;
+    let body = {};
+    try { body = await res.clone().json(); } catch {}
+    if (body.error === 'shutting down') {
+      esperandoReinicio = true;
+      mostrarAvisoReinicio('La forja se está reiniciando… reintento esta acción en 1 min.');
+      if (typeof reintentar === 'function') setTimeout(reintentar, 60000);
+      return true;
+    }
+    return false;
+  }
+
+  // El botón "⟳ Schedule restart": con confirmación, dispara el apagado ordenado.
+  btnRestart.onclick = async () => {
+    if (!confirm('¿Programar el reinicio de la forja?\n\nDejará de aceptar trabajo nuevo, esperará a que los claudes activos terminen, y al quedar en cero quedará desconectada para que la reinicies a mano.')) return;
+    esperandoReinicio = true;
+    mostrarAvisoReinicio('Reinicio programado: la forja está drenando. Espera a que terminen los claudes activos…');
+    try { await fetch('/api/forge/schedule-restart', { method: 'POST' }); } catch {}
+    pollForgeStatus();
   };
 
   // ── arranque ─────────────────────────────────────────────────────────────────
   async function init() {
     loadCycle();
-    loadModel();
+    loadUsage();
+    setInterval(loadUsage, 4 * 60 * 1000);
+    pollForgeStatus();
+    setInterval(pollForgeStatus, 3000);
     loadTareas();
     updateSelectionUI();
     const chats = await loadList();
@@ -1679,7 +3165,7 @@
           await loadList();
           openChat(j.chat.id);
           if (j.spawned) {
-            pending = true; pendingBaseline = 0; pendingParent = null; pendingAuthor = 'iris';
+            addPending('iris', null);
             lastSig = ''; refreshThread();
           }
         }

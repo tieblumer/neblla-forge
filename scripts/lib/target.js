@@ -30,11 +30,23 @@ export const FORGE_ROOT = path.resolve(__dirname, '..', '..');
 export function resolveProjectRoot() {
   const override = process.env.NEBLLA_PROJECT_ROOT;
   if (override && override.trim()) return path.resolve(override.trim());
+
+  // ── FASE DE PRUEBA (2026-06-05): la maquinaria SE AUTO-HOSPEDA en el forge ──────
+  // Mientras validamos la nueva estructura forge/ (forge/backbone · forge/sprint ·
+  // forge/tests), la maquinaria apunta al PROPIO forge y NUNCA al producto, para no
+  // tocar project/. Para RESTAURAR el objetivo-producto cuando la estructura esté
+  // probada: borra este `return` (o exporta NEBLLA_PROJECT_ROOT=./project) y deja que
+  // siga el bloque comentado de abajo.
+  return FORGE_ROOT;
+
+  /* // objetivo-producto — restaurar cuando la estructura forge/ esté validada:
   const candidate = path.join(FORGE_ROOT, 'project');
   try {
     if (fs.existsSync(path.join(candidate, 'package.json'))) return candidate;
-  } catch { /* fall through to self */ }
+  } catch { // fall through to self
+  }
   return FORGE_ROOT;
+  */
 }
 
 // Resolved once at import. Scripts that mutate the env mid-process (the tests)

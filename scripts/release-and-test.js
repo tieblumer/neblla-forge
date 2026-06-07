@@ -53,7 +53,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = PROJECT_ROOT;
 const VERSION_FILE = path.join(ROOT, 'public', 'version.txt');
 const FAILURE_LOG  = path.join(ROOT, '.test-failure.log');
-const SPRINTS_DIR  = path.join(ROOT, 'backbone', 'sprints');
+const SPRINTS_DIR  = path.join(ROOT, 'forge', 'backbone', 'sprints');
 // Hotfix signal: when Otto (the from-outside prod re-check) fails after a deploy,
 // we DON'T auto-fix-and-re-ship anymore — we drop this file and exit non-zero so
 // a human (Iris) opens a `sprint open --hotfix` sprint. sprint.js prioritises a

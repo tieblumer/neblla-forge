@@ -7,36 +7,37 @@ node_modules
 
 # forge UI (npm run forge) — las conversaciones son demasiado efímeras para git;
 # solo generarían ruido. Cada sprint arranca limpio. Viven solo en el working tree.
-sprint/chats/
-sprint/cycle.json
+forge/sprint/chats/
+forge/sprint/cycle.json
 # pantallazos pegados en el chat (working-tree only, como las conversaciones).
 pantallazos/
 # contador de tokens (scripts/forge-token-log.js): registro de gasto por spawn,
 # artefacto de runtime que se regenera solo. Nunca a git.
-sprint/token-log.jsonl
+forge/sprint/token-log.jsonl
 
 # forge machinery transient artifacts — never committed.
 scripts/_work/
 .wt/
 .bitacora-*.txt
+.forge-browser/
 
 # sprint director (scripts/sprint.js) transients
-backbone/sprints/.verdict.json
-backbone/sprints/.hotfix-needed.json
-backbone/sprints/.coherence-advisory.md
-backbone/sprints/*.state.json
-backbone/sprints/*.state.json.tmp-*
+forge/backbone/sprints/.verdict.json
+forge/backbone/sprints/.hotfix-needed.json
+forge/backbone/sprints/.coherence-advisory.md
+forge/backbone/sprints/*.state.json
+forge/backbone/sprints/*.state.json.tmp-*
 
 # sandbox heart (scripts/heart.js) transients — the NOTES live in the working tree
 # only (gitignored), seeded into worktrees by the heart, never via git.
-backbone/sandbox/.heart.json
-backbone/sandbox/.heart.log
-backbone/sandbox/.drain-requested
-backbone/sandbox/.sandbox-drained
-backbone/sandbox/.worktree-commands.json
-backbone/sandbox/**/*.tmp-*
-backbone/sandbox/.demo/
-backbone/sandbox/notas/
+forge/backbone/sandbox/.heart.json
+forge/backbone/sandbox/.heart.log
+forge/backbone/sandbox/.drain-requested
+forge/backbone/sandbox/.sandbox-drained
+forge/backbone/sandbox/.worktree-commands.json
+forge/backbone/sandbox/**/*.tmp-*
+forge/backbone/sandbox/.demo/
+forge/backbone/sandbox/notas/
 
 # product secrets backup — never track
 neblla-env-backup/
