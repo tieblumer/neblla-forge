@@ -17,9 +17,11 @@
  * y, FUERA de la escalera, error ✕ (rojo) = petó/revisar.
  *
  * Los peldaños se LEEN de las marcas que el motor escribe en la tarea:
- *   - `builtAt`  → Ejecutar creó el worktree y Miguel está/estuvo construyendo;
- *   - `brought`  → el build TERMINÓ y vive en el worktree (árbol aislado), pero
- *                  todavía NO está en master → peldaño 'terminada' 🌳;
+ *   - `builtAt`  → Ejecutar creó el worktree y Miguel está construyendo → 'cogida' ⏳;
+ *   - `construido` → Miguel ACABÓ el build (vive en el worktree); espera "Completar"
+ *                  → peldaño 'terminada' 🌳 (el gate: ya no se sube solo a master);
+ *   - `brought`  → el delta del worktree se aplicó (merge) pero aún no en master →
+ *                  también 'terminada' 🌳;
  *   - `enMaster` → el delta del worktree YA se commiteó a master → 'enMaster' ✓
  *                  (cierre feliz, verde);
  *   - `error`    → petó / agotó reintentos → 'error' ✕ (rojo, fuera de la escalera).
@@ -53,6 +55,8 @@ function mainEstado(tarea) {
   if (tarea.error)              return 'error';
   if (tarea.enMaster)           return 'enMaster';
   if (tarea.brought)            return 'terminada';
+  if (tarea.construido)         return 'terminada';   // Miguel ACABÓ el build (vive en el
+                                                      // worktree); espera a "Completar" → 🌳
   if (tarea.builtAt)            return 'cogida';
   return 'pendiente';
 }
@@ -124,6 +128,43 @@ export function pasoRecomendado(tarea) {
   else if (!seCorrieron) key = 'probar';          // 6 → probar la batería
   else if (!t.enMaster) key = 'completar';        // 7 → completar
   return key ? { key, label: PASO_LABEL[key] } : null;
+}
+
+// ── EL PASO RECOMENDADO de una CONVERSACIÓN (la mitad previa a la tarea) ──────
+// Mismo principio que pasoRecomendado, pero para un chat: el camino determinista
+// idea → William → Iris(+preguntas) → plan de Aubé → aprobar (que crea la tarea).
+// Puro: decide solo desde los mensajes del hilo. Devuelve { key, label, msgId? } o
+// null (chat vacío, o ya nació una tarea de aquí).
+//   william → iris → responder(si hay preguntas) → aube(crear plan) → aprobar
+const PASO_CONV_LABEL = {
+  william: 'Opinión de William',
+  iris: 'Opinión de Iris',
+  responder: 'Responder las preguntas',
+  aube: 'Crear el plan (Aubé)',
+  aprobar: 'Aprobar el plan → crea la tarea',
+};
+export function pasoConversacion(chat) {
+  const msgs = (chat && Array.isArray(chat.messages)) ? chat.messages : [];
+  if (!msgs.length) return null;
+  // ¿ya nació una tarea de aquí? (un mensaje de Aubé colapsado en stub con tareaId) → hecho
+  if (msgs.some((m) => m.tareaId != null)) return null;
+  const tiene = (a) => msgs.some((m) => m.author === a);
+  // una pregunta de un agente SIN respuesta de Tie (la respuesta cuelga por replyTo)
+  const preg = msgs.find((m) => m.type === 'pregunta'
+    && !msgs.some((k) => k.replyTo === m.id && k.author === 'tie'));
+  // el plan ESTRUCTURADO de Aubé (vía MCP proponer_plan), el último que haya
+  const plan = [...msgs].reverse().find((m) => m.author === 'aube' && m.plan
+    && (m.plan.resumen || (m.plan.partes || []).length));
+  let key = null, msgId = null;
+  if (!tiene('william')) key = 'william';
+  else if (!tiene('iris')) key = 'iris';
+  else if (preg) { key = 'responder'; msgId = preg.id; }
+  else if (!plan) key = 'aube';
+  else { key = 'aprobar'; msgId = plan.id; }
+  if (!key) return null;
+  const out = { key, label: PASO_CONV_LABEL[key] };
+  if (msgId != null) out.msgId = msgId;
+  return out;
 }
 
 // Decora una tarea con su estado computado + subtareas + el paso recomendado (lo

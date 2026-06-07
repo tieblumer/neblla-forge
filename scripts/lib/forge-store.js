@@ -237,6 +237,56 @@ export function replaceMessageText(root, id, msgId, text) {
   });
 }
 
+// Borra UN mensaje de un hilo sobre el árbol replyTo. Serializado por chat.
+//   - cascade=true  → borra el mensaje y TODOS sus descendientes (subárbol entero).
+//   - cascade=false → borra solo ese mensaje y re-cuelga sus hijos DIRECTOS al
+//                     replyTo del borrado (si era raíz → null: quedan como nuevas
+//                     raíces). Los nietos no se tocan (siguen colgando de sus padres).
+// Idempotente: un msgId inexistente no lanza, devuelve { removed:[], reparented:[] }
+// y deja el chat igual. Devuelve { removed:[ids], reparented:[{id,replyTo}] }.
+export function deleteMessage(root, id, msgId, { cascade = false } = {}) {
+  return withChatLock(root, id, () => {
+    const chat = readChat(root, id);
+    if (!chat) throw new Error('conversación no encontrada: ' + id);
+    const messages = chat.messages || [];
+    const target = messages.find((m) => m.id === Number(msgId));
+    if (!target) return { removed: [], reparented: [] };
+
+    const removed = [];
+    const reparented = [];
+
+    if (cascade) {
+      // Subárbol entero: el target y todo lo que (transitivamente) le cuelga.
+      const kill = new Set([target.id]);
+      let crecio = true;
+      while (crecio) {
+        crecio = false;
+        for (const m of messages) {
+          if (!kill.has(m.id) && m.replyTo != null && kill.has(m.replyTo)) {
+            kill.add(m.id); crecio = true;
+          }
+        }
+      }
+      chat.messages = messages.filter((m) => !kill.has(m.id));
+      removed.push(...[...kill].sort((a, b) => a - b));
+    } else {
+      // Solo el target: sus hijos directos se re-cuelgan de su replyTo.
+      const nuevoPadre = (target.replyTo === undefined ? null : target.replyTo);
+      for (const m of messages) {
+        if (m.replyTo === target.id) {
+          m.replyTo = nuevoPadre;
+          reparented.push({ id: m.id, replyTo: nuevoPadre });
+        }
+      }
+      chat.messages = messages.filter((m) => m.id !== target.id);
+      removed.push(target.id);
+    }
+
+    writeChat(root, chat);
+    return { removed, reparented };
+  });
+}
+
 // ── el vínculo conversación ↔ tarea (el "stub" de Aubé) ──────────────────────
 // Cuando se APRUEBA una tarea desde un mensaje de Aubé, ese mensaje no se borra:
 // se COLAPSA en un stub "[Tarea NNN creada: título]" que apunta a la tarea
@@ -580,9 +630,21 @@ export function setTareaBuild(root, id, { worktree, branch, repo, base } = {}) {
   // re-Ejecutar empieza de cero: el build anterior ya no vale, así que las marcas
   // de avance posteriores (traído / en master) se borran para que el panel vuelva
   // a ⏳ cogida y no quede un ✓ mentiroso de un build viejo.
+  delete tarea.construido; delete tarea.construidoAt;   // el build anterior ya no cuenta
   delete tarea.brought; delete tarea.broughtAt;
   delete tarea.enMaster; delete tarea.enMasterAt; delete tarea.masterCommit;
   delete tarea.miguelInterrumpido; delete tarea.interrumpidoAt;   // re-lanzar borra el "build interrumpido"
+  return writeTarea(root, tarea);
+}
+
+// Marca que Miguel ACABÓ de construir (build vivo en el worktree, aún sin subir a
+// master): la tarea pasa a 'terminada' 🌳 y espera a "Completar". setTareaBuild la
+// limpia al re-Ejecutar. Idempotente; no lanza si la tarea no existe.
+export function markTareaConstruido(root, id) {
+  const tarea = readTarea(root, id);
+  if (!tarea) return null;
+  tarea.construido = true;
+  tarea.construidoAt = new Date().toISOString();
   return writeTarea(root, tarea);
 }
 

@@ -281,7 +281,16 @@
 
   /* árbol de mensajes (estilo reddit) */
   .node { margin: 0 0 10px; }
-  .who { font-size: 11px; color: var(--muted); margin: 0 2px 3px; }
+  .who { font-size: 11px; color: var(--muted); margin: 0 2px 3px; display: flex; align-items: center; gap: 6px; }
+  .who .who-txt { flex: 1 1 auto; min-width: 0; }
+  /* borrar UN mensaje (tarea #018): oculto hasta que el ratón pasa por la fila */
+  .msg-del {
+    flex: 0 0 auto; font: inherit; font-size: 12px; line-height: 1; cursor: pointer;
+    background: transparent; color: var(--muted); border: 1px solid transparent;
+    border-radius: 6px; padding: 1px 6px; opacity: 0; transition: opacity .12s ease;
+  }
+  .node:hover > .who .msg-del, .node.selected > .who .msg-del { opacity: 1; }
+  .msg-del:hover { color: #ff6b6b; border-color: #ff6b6b; }
   .bubble {
     padding: 9px 13px; border-radius: 12px; background: var(--other);
     white-space: pre-wrap; word-wrap: break-word; display: inline-block; max-width: 100%;
@@ -467,6 +476,11 @@
     border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; font-size: 13px; font-weight: 600; cursor: pointer;
   }
   .tarea-def h2 { margin: 4px 0 6px; font-size: 16px; }
+  /* tarea sin plan todavía: cartel claro en vez de complejidad/estructura falsas */
+  .tarea-def .td-sinplan {
+    margin: 12px 0 0; padding: 10px 12px; border: 1px dashed var(--border);
+    border-radius: 8px; color: var(--muted); font-size: 13px;
+  }
   .tarea-def .td-body { white-space: pre-wrap; color: var(--text); font-size: 13px; }
   .td-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .td-btn {
@@ -482,6 +496,15 @@
      NO se va con el scroll del hilo. Crece hacia arriba si hay muchos botones. */
   .tarea-acts-bar { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
   .tarea-acts-bar .td-acts { margin-top: 0; }
+  /* EL paso siguiente: un botón ancho, rosa, imposible de no ver. */
+  .nextstep-bar { margin-bottom: 10px; }
+  .nextstep-btn {
+    width: 100%; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+    border: 1px solid var(--accent); background: var(--accent); color: #fff;
+    border-radius: 8px; padding: 8px 14px; text-align: left;
+  }
+  .nextstep-btn:hover:not(:disabled) { filter: brightness(1.08); }
+  .nextstep-btn:disabled { opacity: .55; cursor: not-allowed; filter: none; }
   .tarea-def input.td-edit, .tarea-def textarea.td-edit {
     width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 8px 10px; font: inherit; outline: none; margin-bottom: 8px;
@@ -799,6 +822,10 @@
       </div>
     </div>
     <div class="composer">
+      <!-- EL paso siguiente (determinista, lo decide la forja): un clic = un paso.
+           En una conversación recorre William→Iris→Aubé→aprobar; en una tarea,
+           definir→escribir→ejecutar→probar→completar. -->
+      <div class="nextstep-bar" id="nextStepBar" style="display:none"></div>
       <!-- barra FIJA con las acciones de la tarea (Aprobar/Ejecutar/Probar/Completar/
            Subir a master…): siempre a la vista encima del input, no se va con el scroll. -->
       <div class="tarea-acts-bar" id="tareaActsBar" style="display:none"></div>
@@ -857,6 +884,8 @@
   const tareaListEl = document.getElementById('tareaList');
   const tareaDefEl = document.getElementById('tareaDef');
   const tareaActsBarEl = document.getElementById('tareaActsBar');
+  const nextStepBarEl = document.getElementById('nextStepBar');
+  let chatNext = null;   // el paso siguiente de la CONVERSACIÓN abierta (lo decide la forja)
   let currentTarea = null;   // F9b: la tarea abierta en el centro (su definición fija), o null
   let editingTareaDef = false; // true mientras se edita la definición a mano (no la pises con el sondeo)
   const threadEl = document.getElementById('thread');
@@ -1578,10 +1607,25 @@
 
     const who = document.createElement('div');
     who.className = 'who';
-    who.textContent = m.thinking
+    const whoTxt = document.createElement('span');
+    whoTxt.className = 'who-txt';
+    whoTxt.textContent = m.thinking
       ? nameOf(m.author) + ' · pensando…'
       : nameOf(m.author) + ' · ' + m.type + (m.replyTo ? ' · ↳ #' + m.replyTo : '') + (m.edited ? ' · editado' : '') + '  (#' + m.id + ')'
         + (m.id === selectedId ? '  · 👑 rey' : '');
+    who.appendChild(whoTxt);
+    // botón de borrar por mensaje (oculto hasta el hover de la fila, como el ✕ de
+    // conversación). No en fantasmas (aún sin id real). Llama a borrarMensaje, que
+    // decide si preguntar cascada según tenga descendientes en el árbol local.
+    if (!m.thinking) {
+      const del = document.createElement('button');
+      del.className = 'msg-del';
+      del.type = 'button';
+      del.textContent = '🗑';
+      del.title = 'Borrar este mensaje';
+      del.onclick = (e) => { e.stopPropagation(); borrarMensaje(m); };
+      who.appendChild(del);
+    }
     node.appendChild(who);
 
     if (m.thinking) {
@@ -1852,6 +1896,48 @@
     return ms.length ? ms[ms.length - 1].id : null;
   }
 
+  // ── borrar UN mensaje ────────────────────────────────────────────────────────
+  // Si el mensaje tiene descendientes (otros le responden por replyTo, es raíz de un
+  // sub-hilo) preguntamos: borrar TODO el hilo en cascada (cascade=true) o solo este
+  // mensaje y re-colgar sus hijos del padre (cascade=false). Si es una hoja (sin
+  // descendientes), se borra directo con confirm(). El back solo obedece el flag.
+  async function borrarMensaje(m) {
+    const msgs = (lastChat && lastChat.messages) || [];
+    const hijos = msgs.filter((x) => x.replyTo === m.id);   // descendientes directos
+    let cascade = false;
+    if (hijos.length) {
+      const todo = confirm('Este mensaje tiene ' + hijos.length + ' respuesta(s) colgando.\n\n'
+        + 'Aceptar → borrar TODO el hilo en cascada.\n'
+        + 'Cancelar → borrar SOLO este mensaje (los hijos se re-cuelgan del padre).');
+      cascade = todo ? true : false;
+    } else {
+      if (!confirm('¿Borrar este mensaje? Es una hoja, no afecta a nadie.')) return;
+    }
+    const res = await fetch(`/api/chats/${active}/messages/${m.id}`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cascade }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(j.error || 'No se pudo borrar.'); return; }
+    aplicarBorrado(j);
+  }
+
+  // Aplica { removed, reparented } al estado local y re-renderiza: limpia fantasmas
+  // colgados de un mensaje borrado y suelta el rey si era uno de los borrados.
+  function aplicarBorrado(j) {
+    const fuera = new Set(j.removed || []);
+    if (lastChat) {
+      lastChat.messages = (lastChat.messages || []).filter((x) => !fuera.has(x.id));
+      for (const r of (j.reparented || [])) {
+        const mm = lastChat.messages.find((x) => x.id === r.id);
+        if (mm) mm.replyTo = r.replyTo;
+      }
+    }
+    pendings = (pendings || []).filter((p) => !fuera.has(p.parent));
+    if (fuera.has(selectedId)) selectedId = null;
+    lastSig = ''; refreshThread();
+  }
+
   // ── editar ───────────────────────────────────────────────────────────────────
   function startEdit(m) {
     editTarget = m.id;
@@ -1901,13 +1987,16 @@
     if (editTarget != null) return confirmEdit();
     const text = inputEl.value.trim();
     if (!active) return;
-    // input vacío SÍ vale si hay un bloque seleccionado: Iris arranca la charla
-    // sobre él por iniciativa propia. Sin texto y sin rey no hay nada que hacer.
-    if (!text && selectedId == null) return;
+    // target de Iris: el rey si lo hay; si no, y sin texto, el ÚLTIMO mensaje del hilo
+    // (Iris opina sobre lo último — p.ej. responde a William). Así "Siguiente paso:
+    // Iris" y el botón sin selección ya no se quedan mudos. Solo se aborta si el chat
+    // está REALMENTE vacío (ni texto, ni rey, ni mensajes).
+    const replyTo = (selectedId != null) ? selectedId : (text ? null : lastMsgId());
+    if (!text && replyTo == null) return;
     btnCharlar.disabled = true;
     const res = await fetch('/api/chats/' + active + '/charla', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, replyTo: selectedId, scope }),
+      body: JSON.stringify({ text, replyTo, scope }),
     });
     btnCharlar.disabled = false;
     if (await apagadoEnCurso(res, () => charlar())) return;
@@ -2028,13 +2117,15 @@
     // ya está en el hilo desde el servidor y el sondeo lo pinta.
     lastSig = ''; refreshThread();
   }
-  async function aprobarTarea() {
+  async function aprobarTarea(msgId) {
     if (!active) return;
     // el mensaje rey (el de Aubé sobre el que se pulsa "Aprobar") es el que se lleva
-    // la tarea: viaja como fromMsg → el back lo colapsa en su stub.
+    // la tarea: viaja como fromMsg → el back lo colapsa en su stub. "Siguiente paso"
+    // pasa el id del plan directamente; a mano, se usa el seleccionado.
+    const fromMsg = (msgId != null) ? msgId : selectedId;
     const res = await fetch('/api/tareas', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fromChat: active, fromMsg: selectedId }),
+      body: JSON.stringify({ fromChat: active, fromMsg }),
     });
     if (!res.ok) { alert('No se pudo aprobar la tarea.'); return; }
     // el plan ha salido del hilo (dejó su stub): refresca el hilo y las tareas.
@@ -2072,9 +2163,11 @@
   async function aprobarPlan(id) {
     let res, j;
     try { res = await fetch('/api/tareas/' + id + '/plan/aprobar', { method: 'POST' }); j = await res.json(); }
-    catch { alert('No se pudo aprobar el plan.'); return; }
-    if (res.status === 422) { alert('El plan aún no es aprobable:\n\n• ' + (j.motivos || ['(sin detalle)']).join('\n• ')); return; }
-    if (!res.ok) { alert('No se pudo aprobar el plan: ' + (j.error || 'error')); return; }
+    catch { console.warn('[forge] aprobar plan: fallo de red'); return; }
+    if (!res.ok) {
+      const motivo = res.status === 422 ? 'plan no aprobable: ' + ((j.motivos || []).join(' · ') || '(sin detalle)') : (j.error || 'error');
+      console.warn('[forge] aprobar plan ' + id + ':', motivo); return;
+    }
     currentTarea = j; renderTareaDef(); loadTareas();
   }
 
@@ -2087,7 +2180,7 @@
   async function definirTests(id) {
     const t = currentTarea || {};
     const tid = id || t.id;
-    if (!tid) { alert('Abre una tarea primero.'); return; }
+    if (!tid) return;
     let res, j;
     try {
       res = await fetch('/api/tareas/' + tid + '/tests/definir', {
@@ -2095,9 +2188,8 @@
         body: JSON.stringify({ steer: inputEl.value.trim() }),
       });
       j = await res.json();
-    } catch { alert('No se pudo lanzar a Ana Liz.'); return; }
-    if (res.status === 409 && j && j.busy) { alert('Ana Liz ya está trabajando en esta tarea — espera a que termine.'); return; }
-    if (!j || !j.spawned) { alert('No se pudo lanzar a Ana Liz: ' + ((j && j.error) || 'error')); return; }
+    } catch { console.warn('[forge] definir tests: fallo de red'); return; }
+    if (!j || !j.spawned) { console.warn('[forge] definir tests ' + tid + ':', (j && j.busy) ? 'Ana Liz ocupada' : ((j && j.error) || 'error')); return; }
     inputEl.value = ''; lastSig = ''; loadTareas(); refreshThread();
   }
   const planificarTests = definirTests;   // alias del nombre viejo
@@ -2105,7 +2197,7 @@
   // Escribir tests (Ana Liz, con código): convierte las definiciones en tests reales.
   async function escribirTests(id) {
     const tid = id || (currentTarea && currentTarea.id);
-    if (!tid) { alert('Abre una tarea primero.'); return; }
+    if (!tid) return;
     let res, j;
     try {
       res = await fetch('/api/tareas/' + tid + '/tests/escribir', {
@@ -2113,9 +2205,8 @@
         body: JSON.stringify({ steer: inputEl.value.trim() }),
       });
       j = await res.json();
-    } catch { alert('No se pudo lanzar a Ana Liz.'); return; }
-    if (res.status === 409) { alert((j && j.error) || 'No se puede ahora.'); return; }
-    if (!j || !j.spawned) { alert('No se pudo: ' + ((j && j.error) || 'error')); return; }
+    } catch { console.warn('[forge] escribir tests: fallo de red'); return; }
+    if (!j || !j.spawned) { console.warn('[forge] escribir tests ' + tid + ':', (j && j.error) || 'error'); return; }
     inputEl.value = ''; lastSig = ''; loadTareas(); refreshThread();
   }
 
@@ -2126,25 +2217,21 @@
     loadTareas();   // pinta el ⏳ que el back acaba de poner
     let j;
     try { j = await (await fetch('/api/tareas/' + tid + '/tests/probar', { method: 'POST' })).json(); }
-    catch { alert('No se pudo probar.'); return; }
-    if (j && j.ok) alert('Batería: ✓ ' + j.pasa + ' · ✗ ' + j.falla + (j.indet ? ' · ? ' + j.indet : ''));
-    else alert('No se pudo probar: ' + ((j && j.reason) || 'error'));
-    loadTareas();
+    catch { console.warn('[forge] probar tests: fallo de red'); loadTareas(); return; }
+    if (!(j && j.ok)) console.warn('[forge] probar tests ' + tid + ':', (j && j.reason) || 'error');
+    loadTareas();   // el resultado (✓/✗) se ve en la columna, no en un popup
   }
 
   // Completar tarea (el gate): sube a master, corre los tests, borra los temporales.
   async function completarTarea(id) {
     const tid = id || (currentTarea && currentTarea.id);
     if (!tid) return;
-    if (!confirm('¿Completar la tarea?\n\nSe sube a master, se corren los tests y se borran los temporales. La tarea queda cerrada.')) return;
+    // sin confirm ni alert: la tarea se completa y el resultado se ve solo (la columna
+    // y el hilo se repintan). Si algo falla, queda en la consola, no en un popup.
     let j;
     try { j = await (await fetch('/api/tareas/' + tid + '/completar', { method: 'POST' })).json(); }
-    catch { alert('No se pudo completar.'); return; }
-    if (j && j.ok) {
-      let msg = '✅ Tarea completada.';
-      if (j.prueba && j.prueba.ok) msg += '\nTests: ✓ ' + j.prueba.pasa + ' · ✗ ' + j.prueba.falla;
-      alert(msg);
-    } else alert('No se pudo completar: ' + ((j && j.error) || 'error'));
+    catch { j = { ok: false, error: 'no se pudo completar' }; }
+    if (!(j && j.ok)) console.warn('[forge] completar tarea ' + tid + ':', (j && j.error) || 'error');
     lastSig = ''; loadTareas(); refreshThread();
   }
 
@@ -2156,15 +2243,15 @@
   // en la tarea solo (onDone), y el sondeo lo refleja aquí sin que toques nada.
   async function revisarAube(id) {
     const t = currentTarea;
-    if (!t || !t.threadId) { alert('Abre la tarea primero (no encuentro su hilo).'); return; }
+    if (!t || !t.threadId) return;
     let j;
     try {
       j = await (await fetch('/api/chats/' + t.threadId + '/aube', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ steer: inputEl.value.trim() }),
       })).json();
-    } catch { alert('No se pudo lanzar a Aubé.'); return; }
-    if (!j || !j.spawned) { alert('No se pudo lanzar a Aubé: ' + ((j && j.error) || 'error')); return; }
+    } catch { console.warn('[forge] revisar (Aubé): fallo de red'); return; }
+    if (!j || !j.spawned) { console.warn('[forge] revisar (Aubé):', (j && j.error) || 'error'); return; }
     inputEl.value = '';
     lastSig = ''; refreshThread();
   }
@@ -2174,6 +2261,8 @@
     const res = await fetch('/api/chats/' + active);
     if (!res.ok) return;
     const chat = await res.json();
+    chatNext = chat.next || null;   // el paso siguiente de la conversación (lo decide la forja)
+    renderNextStep();
     const msgs = chat.messages || [];
     otherCount = msgs.filter((m) => m.author !== 'tie').length;
     // retira CADA fantasma solo cuando crece el contador de SU propio autor (llegó
@@ -2244,6 +2333,7 @@
     if (!currentTarea) {
       tareaDefEl.style.display = 'none'; tareaDefEl.innerHTML = '';
       tareaActsBarEl.style.display = 'none'; tareaActsBarEl.innerHTML = '';
+      renderNextStep();   // es una conversación (o nada): el botón usa chatNext
       return;
     }
     const t = currentTarea;
@@ -2267,8 +2357,11 @@
     const acts = document.createElement('div'); acts.className = 'td-acts';
     const edit = document.createElement('button'); edit.className = 'td-btn'; edit.textContent = '✎ Editar definición';
     edit.onclick = startEditTareaDef;
-    const rev = document.createElement('button'); rev.className = 'td-btn'; rev.textContent = '✦ Revisar (Aubé)';
-    rev.title = 'Aubé reescribe el plan en el hilo de la tarea desde la conversación';
+    const rev = document.createElement('button'); rev.className = 'td-btn';
+    // sin plan todavía → es el PRIMER paso ("Crear plan"), no un "Revisar" (re-hacer).
+    rev.textContent = t.plan ? '✦ Revisar (Aubé)' : '✦ Crear plan (Aubé)';
+    rev.title = t.plan ? 'Aubé reescribe el plan en el hilo de la tarea desde la conversación'
+                       : 'Aubé redacta el plan de esta tarea (resumen + partes + contrato)';
     rev.onclick = () => revisarAube(t.id);
     mark(rev, 'rev');
     const ejec = document.createElement('button'); ejec.className = 'td-btn'; ejec.textContent = '🔨 Ejecutar';
@@ -2369,15 +2462,78 @@
       tareaDefEl.append(orig);
     }
     tareaDefEl.append(eye, h, body);
-    if (t.plan) tareaDefEl.append(renderPlanBlock(t.plan, { hidePartes: (t.subtareas || []).length > 0 }));
-    tareaDefEl.append(renderComplejidadRow(t));
-    const struct = renderStructureBlock(t);
-    if (struct) tareaDefEl.append(struct);
+    if (t.plan) {
+      tareaDefEl.append(renderPlanBlock(t.plan, { hidePartes: (t.subtareas || []).length > 0 }));
+      // la complejidad y la estructura SOLO tienen sentido con un plan: enseñarlas en
+      // una tarea vacía (complejidad "compleja por defecto") finge contenido que no hay.
+      tareaDefEl.append(renderComplejidadRow(t));
+      const struct = renderStructureBlock(t);
+      if (struct) tareaDefEl.append(struct);
+    } else {
+      // sin plan todavía: un cartel claro de qué falta, en vez de mobiliario que confunde.
+      const vacio = document.createElement('div'); vacio.className = 'td-sinplan';
+      vacio.textContent = '✦ Esta tarea aún no tiene plan. Pulsa “Crear plan (Aubé)” para que Aubé lo redacte.';
+      tareaDefEl.append(vacio);
+    }
     // las acciones NO van en el bloque que scrollea: viven en la barra fija del
     // composer, siempre a la vista encima del input.
     tareaActsBarEl.innerHTML = '';
     tareaActsBarEl.append(acts);
     tareaActsBarEl.style.display = 'block';
+    renderNextStep();   // tarea abierta: el botón usa currentTarea.next
+  }
+
+  // ── EL botón "Siguiente paso" ────────────────────────────────────────────────
+  // Un clic = un paso. La forja decide CUÁL (determinista): si hay tarea abierta,
+  // los pasos de la tarea (currentTarea.next); si es una conversación, los de la
+  // conversación (chatNext, que viaja en GET /api/chats/:id). Aquí solo se DISPARA.
+  function renderNextStep() {
+    if (!nextStepBarEl) return;
+    nextStepBarEl.innerHTML = '';
+    if (!active) { nextStepBarEl.style.display = 'none'; return; }
+    const next = currentTarea ? (currentTarea.next || null) : chatNext;
+    if (!next || !next.key) { nextStepBarEl.style.display = 'none'; return; }
+    const b = document.createElement('button');
+    b.className = 'nextstep-btn';
+    b.textContent = '▸ Siguiente paso: ' + next.label;
+    b.title = 'Lo decide la forja, determinista. Un clic lo dispara y espera.';
+    b.onclick = () => dispatchNextStep(next);
+    nextStepBarEl.appendChild(b);
+    nextStepBarEl.style.display = 'block';
+  }
+
+  function dispatchNextStep(next) {
+    if (!next || !next.key) return;
+    if (currentTarea) {
+      const id = currentTarea.id;
+      switch (next.key) {
+        case 'rev':       return revisarAube(id);
+        case 'aprobar':   return aprobarPlan(id);
+        case 'definir':   return definirTests(id);
+        case 'escribir':  return escribirTests(id);
+        case 'ejecutar':  return ejecutarTarea(id);
+        case 'probar':    return probarTests(id);
+        case 'completar': return completarTarea(id);
+      }
+      return;
+    }
+    // conversación
+    switch (next.key) {
+      case 'william':   return challengeAction();
+      case 'iris':      return charlar();
+      case 'aube':      return aube();
+      case 'aprobar':   return aprobarTarea(next.msgId);   // crea la tarea desde el plan de Aubé
+      case 'responder': return focusPregunta();            // no se puede auto-responder: te lleva a ella
+    }
+  }
+
+  // Lleva el foco a la primera pregunta pendiente del hilo (no se puede contestar solo).
+  function focusPregunta() {
+    const q = document.querySelector('.bubble.pregunta-pendiente');
+    if (!q) return;
+    q.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const ta = q.querySelector('textarea');
+    if (ta) ta.focus();
   }
 
   // La complejidad EFECTIVA de una tarea: el override de Tie (t.complejidad) manda
@@ -2426,10 +2582,18 @@
   function renderStructureBlock(t) {
     const tests = (t.testsPlan && Array.isArray(t.testsPlan.tests)) ? t.testsPlan.tests : [];
     const subs = (t.subtareas || []);
-    if (!subs.length && !tests.length) return null;   // todavía no hay nada que mostrar
+    // GRUPOS donde colgar los tests: las subtareas materializadas o, si aún no hay
+    // (plan de una sola parte), las PARTES del plan — porque Ana Liz etiqueta cada
+    // test con el nombre de su parte, no con "subtarea". Sin esto, los tests de una
+    // tarea de una sola parte caían en un grupo que nadie pintaba (invisibles).
+    const grupos = subs.length
+      ? subs.map((s) => ({ name: s.name, alcance: s.alcance }))
+      : ((t.plan && t.plan.partes) || []).map((p) => ({ name: p.name, alcance: { archivos: p.ficheros, frontera: p.hace } }));
+    if (!grupos.length && !tests.length) return null;   // todavía no hay nada que mostrar
     // cada test recuerda su índice GLOBAL (para patch/borrar) y la tarea a la que va.
     const byRef = {};
     tests.forEach((x, i) => { const e = { ...x, _i: i }; (byRef[x.ref] = byRef[x.ref] || []).push(e); });
+    const usados = new Set(['general']);
     const box = document.createElement('div'); box.className = 'td-struct';
 
     // tests generales (de la tarea entera)
@@ -2437,16 +2601,28 @@
     box.append(genH);
     appendTests(box, byRef['general'] || []);
 
-    // cada subtarea: nombre + alcance + sus tests
-    for (const s of subs) {
+    // cada grupo (subtarea o parte del plan): nombre + alcance + sus tests
+    for (const g of grupos) {
+      usados.add(g.name);
       const sd = document.createElement('div'); sd.className = 'st-sub';
-      const nm = document.createElement('div'); nm.className = 'st-name'; nm.textContent = '▸ ' + s.name;
+      const nm = document.createElement('div'); nm.className = 'st-name'; nm.textContent = '▸ ' + g.name;
       const al = document.createElement('div'); al.className = 'st-alcance';
-      const arch = (s.alcance && s.alcance.archivos || []).join(', ');
-      al.textContent = arch + (s.alcance && s.alcance.frontera ? ' — ' + s.alcance.frontera : '');
+      const arch = (g.alcance && g.alcance.archivos || []).join(', ');
+      al.textContent = arch + (g.alcance && g.alcance.frontera ? ' — ' + g.alcance.frontera : '');
       sd.append(nm, al); box.append(sd);
-      appendTests(box, byRef[s.name] || []);
+      appendTests(box, byRef[g.name] || []);
     }
+
+    // CATCH-ALL: tests con un ref que no encajó en ningún grupo conocido → se pintan
+    // igual bajo su propio nombre, para que NUNCA queden invisibles.
+    for (const ref of Object.keys(byRef)) {
+      if (usados.has(ref)) continue;
+      const sd = document.createElement('div'); sd.className = 'st-sub';
+      const nm = document.createElement('div'); nm.className = 'st-name'; nm.textContent = '▸ ' + ref;
+      sd.append(nm); box.append(sd);
+      appendTests(box, byRef[ref]);
+    }
+
     if (!tests.length) {
       const e = document.createElement('div'); e.className = 'st-empty';
       e.textContent = (t.headlessEnCurso || []).includes('analiz')
@@ -2626,14 +2802,12 @@
   // (tope 3); si no entra, la tarea queda en error (✕). El cierre normal es
   // AUTOMÁTICO al terminar Miguel; esto es el reintento manual.
   async function traerTarea(id) {
-    if (!confirm('¿Subir a master el trabajo de esta tarea?\n\nSe trae todo el arbolito y se commitea a master. Si choca, el revisor resuelve el merge (reintenta hasta 3 veces).')) return;
     let j;
     try { j = await (await fetch('/api/tareas/' + id + '/traer', { method: 'POST' })).json(); }
-    catch { alert('No se pudo subir a master.'); return; }
-    if (j.applied && j.enMaster) alert('✅ En master.\nCommiteado. Si tocó el back, reinicia el forge; refresca para ver los cambios del front.');
-    else if (j.empty) alert('El build no dejó ningún cambio.');
-    else if (j.incompatible) alert('⚠️ ' + (j.error || 'El build no encaja con tu árbol actual.') + '\n\n(Este build es viejo: vuelve a pulsar 🔨 Ejecutar.)');
-    else alert('No entró en master: ' + (j.error || 'error') + '\n\nLa tarea queda en revisar (✕).');
+    catch { console.warn('[forge] subir a master: fallo de red'); return; }
+    if (!(j.applied && j.enMaster)) {
+      console.warn('[forge] subir a master ' + id + ':', j.empty ? 'el build no dejó cambios' : j.incompatible ? ('build viejo/incompatible — ' + (j.error || '')) : (j.error || 'no entró en master'));
+    }
     lastSig = ''; refreshThread(); loadTareas();
   }
 
@@ -2647,8 +2821,8 @@
       });
       if (await apagadoEnCurso(res, () => ejecutarTarea(id))) return;
       j = await res.json();
-    } catch { alert('No se pudo ejecutar.'); return; }
-    if (!j || !j.spawned) { alert('No se pudo ejecutar: ' + ((j && j.error) || 'error')); return; }
+    } catch { console.warn('[forge] ejecutar: fallo de red'); return; }
+    if (!j || !j.spawned) { console.warn('[forge] ejecutar ' + id + ':', (j && j.error) || 'error'); return; }
     inputEl.value = '';
     // ya NO ponemos fantasma "pensando": Miguel tiene un mensaje VIVO que se va
     // reescribiendo con el resumen en vivo (Haiku). El sondeo lo muestra y actualiza.
@@ -2674,7 +2848,7 @@
           body: JSON.stringify({ title: ti.value, body: bo.value }),
         })).json();
         currentTarea = { ...t, ...upd };
-      } catch { alert('No se pudo guardar la definición.'); }
+      } catch { console.warn('[forge] guardar definición: fallo de red'); }
       renderTareaDef(); loadTareas();
     };
     cancel.onclick = renderTareaDef;

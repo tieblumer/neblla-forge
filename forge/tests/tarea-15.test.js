@@ -264,7 +264,7 @@ export async function run({ reporter: r }) {
     r.ok('[T-15-15] reconoce el status 503', /res\.status !== 503/.test(fn));
     r.ok('[T-15-15] y el cuerpo error:"shutting down"', fn.includes("body.error === 'shutting down'"));
     // muestra el aviso y reprograma la MISMA acción a 60s (no la descarta)
-    r.ok('[T-15-15] muestra el aviso de reinicio en curso', fn.includes('avisoReinicio'));
+    r.ok('[T-15-15] muestra el aviso de reinicio en curso', fn.includes('mostrarAvisoReinicio'));
     r.ok('[T-15-15] reprograma esa misma acción cada 60s', /setTimeout\(reintentar, 60000\)/.test(fn));
     // está cableado en varias acciones que lanzan trabajo
     r.ok('[T-15-15] cableado en charlar y en ejecutarTarea',

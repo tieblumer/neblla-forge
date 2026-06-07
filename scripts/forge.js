@@ -25,16 +25,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   listChats, createChat, readChat, appendMessage, chatsDir, deleteChat,
-  replaceMessageText, collapseUpToFork, listTareas, createTarea, renameChat,
+  replaceMessageText, deleteMessage, collapseUpToFork, listTareas, createTarea, renameChat,
   readCycle, writeCycle, readTarea, ensureTareaThread, updateTareaDefinition,
-  setTareaBuild, markTareaBrought, markTareaEnMaster, setTareaError, clearTareaError, readModel, writeModel,
+  setTareaBuild, markTareaBrought, markTareaConstruido, markTareaEnMaster, setTareaError, clearTareaError, readModel, writeModel,
   sweepLiveBuilds, markTareaInterrumpido, setTareaComplejidad,
   stampMessageCost, setMessageLive, setLiveBeat, setTareaPlan, approveTareaPlan, setTareaSubtareas, setTareaTestsPlan,
   mutateTestsPlan,
   stubMessageForTarea, restoreStubbedMessage, deleteTarea, resolveOrigen,
 } from './lib/forge-store.js';
 import * as cycle from './lib/forge-firme.js';
-import { ordenar as ordenarTareas, GRUPOS as TAREA_GRUPOS } from './lib/forge-estado.js';
+import { ordenar as ordenarTareas, GRUPOS as TAREA_GRUPOS, pasoConversacion } from './lib/forge-estado.js';
 import { createMergeEngine } from './lib/forge-merge.js';
 import {
   charlaPrompt, williamChallengePrompt, anselmoPrompt, aubePrompt,
@@ -107,6 +107,8 @@ const HERRAMIENTAS_MCP = [
   { value: 'backbone_completo', label: 'backbone_completo', desc: 'leer el backbone completo (backbone.md)' },
   { value: 'leer_feature', label: 'leer_feature', desc: 'listar features y leer una en detalle' },
   { value: 'proponer_plan', label: 'proponer_plan', desc: 'entregar el plan de implementación como datos (Aubé)' },
+  { value: 'definir_tests', label: 'definir_tests', desc: 'redactar los tests en papel (dado/cuando/entonces) directo en la tarea (Ana Liz)' },
+  { value: 'escribir_test', label: 'escribir_test', desc: 'convertir las definiciones en tests de código reales con su ID (Ana Liz)' },
   { value: 'correr_tests', label: 'correr_tests', desc: 'correr la batería de la tarea en el worktree e iterar (Miguel)' },
 ];
 const ESCRIBE_VALUES = new Set(ESCRIBE_OPCIONES.map((o) => o.value));
@@ -1174,7 +1176,10 @@ app.post('/api/chats', (req, res) => {
 app.get('/api/chats/:id', (req, res) => {
   const chat = readChat(ROOT, req.params.id);
   if (!chat) return res.status(404).json({ error: 'conversación no encontrada' });
-  res.json(chat);
+  // `next` = el paso recomendado de la conversación (determinista, lo decide la
+  // forja): el botón "Siguiente paso" del front lo dispara. Lo mismo que `t.next`
+  // hace por una tarea, pero para la mitad de conversación (William→Iris→Aubé→aprobar).
+  res.json({ ...chat, next: pasoConversacion(chat) });
 });
 
 // Detalle del coste de un run (lo que pide el modal al pinchar la chapa $): el
@@ -1196,6 +1201,31 @@ app.delete('/api/chats/:id', (req, res) => {
   catch (e) { return res.status(500).json({ error: 'no se pudo borrar: ' + e.message }); }
   if (!removed) return res.status(404).json({ error: 'conversación no encontrada' });
   res.json({ deleted: req.params.id });
+});
+
+// Borrar UN mensaje de un hilo. El front decide CUÁNDO preguntar (solo si el
+// mensaje tiene descendientes); aquí solo obedecemos el flag cascade. cascade=true
+// borra el subárbol entero; cascade=false re-cuelga los hijos directos del padre
+// del borrado. Responde { removed, reparented }. 404 si no existe la conversación,
+// 400 si el msgId no es válido.
+app.delete('/api/chats/:id/messages/:msgId', (req, res) => {
+  const id = req.params.id;
+  const chat = readChat(ROOT, id);
+  if (!chat) return res.status(404).json({ error: 'conversación no encontrada' });
+
+  const msgId = Number(req.params.msgId);
+  if (!Number.isFinite(msgId)) return res.status(400).json({ error: 'msgId no válido' });
+
+  // cascade del body (JSON) o, en su defecto, de la query (?cascade=true).
+  const raw = (req.body && req.body.cascade != null) ? req.body.cascade : req.query.cascade;
+  const cascade = raw === true || raw === 'true' || raw === 1 || raw === '1';
+
+  try {
+    const result = deleteMessage(ROOT, id, msgId, { cascade });
+    res.json({ removed: result.removed, reparented: result.reparented });
+  } catch (e) {
+    res.status(500).json({ error: 'no se pudo borrar: ' + e.message });
+  }
 });
 
 // Charlar: añade el turno de Tie y abre el headless que contestará vía MCP.
@@ -2057,6 +2087,8 @@ app.post('/api/tareas/:id/ejecutar', (req, res) => {
     // tests ESCRITOS, los corremos para que Tie vea el resultado antes de decidir.
     onDone: ({ failed }) => {
       if (failed) { console.log(`[forge] Miguel petó la tarea ${tarea.id}.`); return; }
+      // Miguel acabó el build → la tarea pasa a 'terminada' 🌳 (espera a "Completar").
+      try { markTareaConstruido(ROOT, tarea.id); } catch {}
       console.log(`[forge] Miguel terminó la tarea ${tarea.id}; esperando aprobación de Tie.`);
       try {
         const t = readTarea(ROOT, tarea.id);

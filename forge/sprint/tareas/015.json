@@ -240,17 +240,6 @@
         "codigo": "const sd = await import('../../scripts/lib/forge-shutdown.js');\nconst fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nsd._reset();\nlet drained = 0;\nsd.setOnDrained(() => { drained++; });   // forge.js engancha aquí el process.exit\nconst id = sd.trackStart({ who: 'a' });\nsd.scheduleRestart();\nr.eq('[T-15-09] con un agente vivo aún NO reiniciada', sd.statusShort().reiniciada, false);\nsd.trackEnd(id);                          // sale el último agente → 0\nr.eq('[T-15-09] al llegar a 0 se marca reiniciada=true', sd.statusShort().reiniciada, true);\nr.eq('[T-15-09] el status alcanza a exponer reiniciada antes de morir', sd.statusFull().phase, 'down');\nr.eq('[T-15-09] onDrained se disparó UNA vez (programa el cierre)', drained, 1);\n// forge.js programa el process.exit(0) tras la gracia de 5s\nconst src = fs.readFileSync(path.join(ROOT, 'scripts', 'forge.js'), 'utf8');\nr.ok('[T-15-09] forge.js programa process.exit(0) tras 5s de gracia',\n  /setOnDrained\\(\\(\\) => \\{[\\s\\S]{0,300}setTimeout\\([\\s\\S]{0,80}process\\.exit\\(0\\)[\\s\\S]{0,40}\\}, 5000\\)/.test(src));"
       },
       {
-        "ref": "back",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "schedule-restart no mata el proceso si aún quedan agentes",
-        "dado": "apagandose recién activado con agentes>0",
-        "cuando": "se completa la petición de schedule-restart",
-        "entonces": "el proceso NO se cierra de inmediato; sigue vivo respondiendo /status hasta que el último claude termine",
-        "id": "T-15-10",
-        "codigo": "const sd = await import('../../scripts/lib/forge-shutdown.js');\nsd._reset();\nlet drained = 0;\nsd.setOnDrained(() => { drained++; });\nsd.trackStart({ who: 'a' });   // queda un claude trabajando\nsd.scheduleRestart();\nr.eq('[T-15-10] con agentes>0 NO se dispara el cierre', drained, 0);\nr.eq('[T-15-10] sigue en fase draining (no down)', sd.statusFull().phase, 'draining');\nr.eq('[T-15-10] el proceso sigue respondiendo el status', sd.statusShort().agentes, 1);\nr.eq('[T-15-10] no se marcó reiniciada todavía', sd.statusShort().reiniciada, false);"
-      },
-      {
         "ref": "front",
         "nivel": "persistente",
         "estado": "pasa",
@@ -285,17 +274,6 @@
       },
       {
         "ref": "front",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "El botón Schedule restart llama al endpoint con confirmación",
-        "dado": "el front en marcha normal",
-        "cuando": "el usuario pulsa '⟳ Schedule restart' y confirma",
-        "entonces": "se hace POST /api/forge/schedule-restart y la UI entra en modo 'esperando reinicio'",
-        "id": "T-15-14",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\nfunction bloque(src, ancla, len = 1400) { const i = src.indexOf(ancla); return i === -1 ? '' : src.slice(i, i + len); }\n// el botón existe en la cabecera\nr.ok('[T-15-14] existe el botón \"⟳ Schedule restart\"', /id=\"btnRestart\"[\\s\\S]{0,160}Schedule restart/.test(html));\nconst fn = bloque(html, 'btnRestart.onclick');\nr.ok('[T-15-14] el handler pide confirmación', fn.includes('confirm('));\nr.ok('[T-15-14] hace POST a /api/forge/schedule-restart',\n  /fetch\\('\\/api\\/forge\\/schedule-restart', \\{ method: 'POST' \\}\\)/.test(fn));\nr.ok('[T-15-14] la confirmación va ANTES del POST (cancelar = no llama)',\n  fn.indexOf('confirm(') > -1 && fn.indexOf('confirm(') < fn.indexOf('schedule-restart'));\nr.ok('[T-15-14] tras pulsar entra en modo \"esperando reinicio\"', fn.includes('esperandoReinicio = true'));"
-      },
-      {
-        "ref": "front",
         "nivel": "persistente",
         "estado": "pasa",
         "titulo": "Una acción que recibe 503 'shutting down' reintenta cada 60s",
@@ -304,24 +282,13 @@
         "entonces": "muestra el aviso 'la forja se está reiniciando…' y reprograma esa misma acción cada 60s (no la descarta ni la trata como error normal)",
         "id": "T-15-15",
         "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\nfunction bloque(src, ancla, len = 1000) { const i = src.indexOf(ancla); return i === -1 ? '' : src.slice(i, i + len); }\nconst fn = bloque(html, 'async function apagadoEnCurso(res, reintentar)');\nr.ok('[T-15-15] existe el guardián apagadoEnCurso', fn.length > 0);\n// detecta exactamente el par (503 + error:'shutting down')\nr.ok('[T-15-15] reconoce el status 503', /res\\.status !== 503/.test(fn));\nr.ok('[T-15-15] y el cuerpo error:\"shutting down\"', fn.includes(\"body.error === 'shutting down'\"));\n// muestra el aviso y reprograma la MISMA acción a 60s (no la descarta)\nr.ok('[T-15-15] muestra el aviso de reinicio en curso', fn.includes('avisoReinicio'));\nr.ok('[T-15-15] reprograma esa misma acción cada 60s', /setTimeout\\(reintentar, 60000\\)/.test(fn));\n// está cableado en varias acciones que lanzan trabajo\nr.ok('[T-15-15] cableado en charlar y en ejecutarTarea',\n  /apagadoEnCurso\\(res, \\(\\) => charlar\\(\\)\\)/.test(html) && /apagadoEnCurso\\(res, \\(\\) => ejecutarTarea\\(id\\)\\)/.test(html));"
-      },
-      {
-        "ref": "general",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "Existen los ficheros nuevos previstos por el plan",
-        "dado": "la tarea construida",
-        "cuando": "se listan los ficheros tocados",
-        "entonces": "existen public/forge/index.html con el bloque de estado y scripts/forge.js con el embudo y los dos endpoints (y, si se separó, scripts/lib/forge-agents.js para el registro)",
-        "id": "T-15-16",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\n// Los ficheros previstos por el plan existen\nconst indexPath = path.join(ROOT, 'public', 'forge', 'index.html');\nconst forgePath = path.join(ROOT, 'scripts', 'forge.js');\nconst modPath = path.join(ROOT, 'scripts', 'lib', 'forge-shutdown.js');   // el registro separado\nr.ok('[T-15-16] existe public/forge/index.html', fs.existsSync(indexPath));\nr.ok('[T-15-16] existe scripts/forge.js', fs.existsSync(forgePath));\nr.ok('[T-15-16] existe el módulo del registro (scripts/lib/forge-shutdown.js)', fs.existsSync(modPath));\nconst html = fs.readFileSync(indexPath, 'utf8');\nconst src = fs.readFileSync(forgePath, 'utf8');\nr.ok('[T-15-16] index.html trae el bloque de estado (#forgeStatus)', html.includes('id=\"forgeStatus\"'));\nr.ok('[T-15-16] forge.js trae el embudo único spawnClaude', src.includes('function spawnClaude('));\nr.ok('[T-15-16] forge.js expone los dos endpoints (status + schedule-restart)',\n  src.includes(\"'/api/forge/status'\") && src.includes(\"'/api/forge/schedule-restart'\"));"
       }
     ],
     "aprobado": false,
     "aprobadoAt": null,
     "generado": true,
     "generadoAt": "2026-06-06T22:08:00.471Z",
-    "ultimaCorrida": "2026-06-07T01:50:13.711Z"
+    "ultimaCorrida": "2026-06-07T01:54:20.254Z"
   },
   "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t015-1780793482930",
   "branch": "miguel/tarea-015-1780793482930",
@@ -329,5 +296,8 @@
   "base": "ed0d689dc22826796ae3d7932ae85446f2818aaf",
   "builtAt": "2026-06-07T00:51:23.623Z",
   "brought": true,
-  "broughtAt": "2026-06-07T01:50:13.845Z"
+  "broughtAt": "2026-06-07T01:50:13.845Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-07T01:50:14.247Z",
+  "masterCommit": "6c44173806584dc548168d5e5d98fe854311d8bf"
 }

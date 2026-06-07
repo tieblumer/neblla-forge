@@ -6,9 +6,7 @@
   "modelo": "",
   "scope": {
     "lee": "codigo",
-    "escribe": [
-      "planes"
-    ],
+    "escribe": [],
     "preguntar": false
   },
   "herramientas": [

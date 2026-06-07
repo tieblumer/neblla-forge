@@ -6,12 +6,12 @@
   "modelo": "",
   "scope": {
     "lee": "codigo",
-    "escribe": [
-      "tests"
-    ],
+    "escribe": [],
     "preguntar": false
   },
   "herramientas": [
-    "contestar"
+    "contestar",
+    "definir_tests",
+    "escribir_test"
   ]
 }
