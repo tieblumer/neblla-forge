@@ -452,6 +452,13 @@
     flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--panel);
     padding: 14px 24px;   /* sin max-height/scroll interno: la ficha se ve entera, como un mensaje */
   }
+  /* T21: la def es el rey (raíz del hilo en modo tarea) — mismo lenguaje visual que
+     .node.selected > .bubble (F22): acento en el borde + halo rosado. */
+  .tarea-def.rey {
+    border-color: var(--accent); cursor: pointer;
+    background: rgba(255,0,102,.10);
+    box-shadow: inset 0 0 0 2px var(--accent), 0 0 20px rgba(255,0,102,.22);
+  }
   .tarea-def .td-eyebrow { font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
   /* link origen: "↰ viene de …" — la cabecera con la que empieza la tarea */
   .tarea-def .td-origen { font-size: 12px; margin-bottom: 6px; }
@@ -503,8 +510,13 @@
     border: 1px solid var(--accent); background: var(--accent); color: #fff;
     border-radius: 8px; padding: 8px 14px; text-align: left;
   }
-  .nextstep-btn:hover:not(:disabled) { filter: brightness(1.08); }
+  .nextstep-btn:hover:not(:disabled):not(.waiting) { filter: brightness(1.08); }
   .nextstep-btn:disabled { opacity: .55; cursor: not-allowed; filter: none; }
+  /* EN CURSO: se ve apagado (no rosa) y avisa de que hay que esperar. */
+  .nextstep-btn.waiting {
+    background: var(--panel-2); color: var(--muted); border-color: var(--border);
+    cursor: default;
+  }
   .tarea-def input.td-edit, .tarea-def textarea.td-edit {
     width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 8px 10px; font: inherit; outline: none; margin-bottom: 8px;
@@ -886,6 +898,7 @@
   const tareaActsBarEl = document.getElementById('tareaActsBar');
   const nextStepBarEl = document.getElementById('nextStepBar');
   let chatNext = null;   // el paso siguiente de la CONVERSACIÓN abierta (lo decide la forja)
+  let liveEnHilo = false;   // ¿hay un mensaje vivo (agente trabajando) en el hilo abierto?
   let currentTarea = null;   // F9b: la tarea abierta en el centro (su definición fija), o null
   let editingTareaDef = false; // true mientras se edita la definición a mano (no la pises con el sondeo)
   const threadEl = document.getElementById('thread');
@@ -894,6 +907,12 @@
   // propio onclick con stopPropagation, así que este handler solo dispara en vacío.
   threadEl.addEventListener('click', (e) => {
     if (e.target.closest('.bubble') || e.target.closest('.node')) return;
+    // En modo tarea, el fondo vacío deselecciona hacia la DEF de Aubé (la raíz real):
+    // selectedId = null + re-render. En conversación, vuelve al primer mensaje.
+    if (currentTarea) {
+      if (selectedId != null) { selectedId = null; if (lastChat) renderThread(lastChat); else updateSelectionUI(); }
+      return;
+    }
     const first = firstMsgId();
     if (first != null && first !== selectedId) selectMsg(first);
   });
@@ -1783,8 +1802,15 @@
     // F22: SIEMPRE hay un rey. Si no había selección (o el rey desapareció tras
     // compactar/borrar), cae al último mensaje real — el que naturalmente
     // responderías/discutirías.
-    if (real.length && (selectedId == null || !real.some((m) => m.id === selectedId))) {
-      selectedId = real[real.length - 1].id;
+    // EXCEPCIÓN (modo tarea): si hay tarea abierta, selectedId == null es un estado
+    // legítimo = "el rey es la definición de Aubé". No lo pisamos con el último
+    // mensaje; solo recuperamos un rey-mensaje si el que había desapareció.
+    const reyVivo = real.some((m) => m.id === selectedId);
+    if (real.length && (selectedId == null || !reyVivo)) {
+      // en modo tarea con selectedId==null el rey es la def: no rellenar.
+      if (!currentTarea || (selectedId != null && !reyVivo)) {
+        selectedId = real[real.length - 1].id;
+      }
     }
     if (titleEl.getAttribute('contenteditable') !== 'true') {
       currentTitle = chat.title;
@@ -1851,14 +1877,20 @@
 
   function selectMsg(id) {
     if (selectedId === id) {
-      // Re-clic sobre el rey actual: "salimos" del sub-hilo y volvemos al hilo
-      // principal. Si el rey YA es el primero, no hay nada que hacer.
+      // Re-clic sobre el rey actual: "salimos" del sub-hilo.
+      // En modo tarea, salir aterriza en la DEF de Aubé (selectedId = null), que es
+      // la verdadera raíz del hilo. En conversación, volvemos al primer mensaje.
+      if (currentTarea) {
+        selectedId = null;
+        if (lastChat) renderThread(lastChat); else updateSelectionUI();
+        return;
+      }
       const first = firstMsgId();
       if (first != null && first !== id) {
         selectedId = first;
         if (lastChat) renderThread(lastChat); else updateSelectionUI();
       }
-      return; // siempre hay un rey: no se deselecciona
+      return; // en conversación siempre hay un rey: no se deselecciona
     }
     selectedId = id;
     if (lastChat) renderThread(lastChat); else updateSelectionUI();
@@ -1886,6 +1918,19 @@
       // "Subir a master" YA NO cuelga del informe de Miguel aquí: se perdía con el
       // scroll. Ahora vive en la barra fija de acciones (renderTareaDef), siempre a
       // la vista encima del input.
+    } else if (currentTarea) {
+      // Modo tarea sin rey-mensaje: el rey es la DEF de Aubé. La barra lo anuncia.
+      const lbl = document.createElement('span');
+      lbl.innerHTML = 'Sobre <span class="king">👑 la tarea · Aubé</span>';
+      selInfo.appendChild(lbl);
+      const prev = document.createElement('span');
+      prev.className = 'preview';
+      prev.textContent = '“' + (currentTarea.body || '').replace(/\s+/g, ' ').slice(0, 60) + '”';
+      selInfo.appendChild(prev);
+      // acciones de la def (aprobar plan, etc.): si hay plan sin aprobar, ofrécelo.
+      if (currentTarea.plan && !currentTarea.plan.aprobado) {
+        selActs.appendChild(selActBtn('Aprobar plan', () => aprobarPlan(currentTarea.id), true));
+      }
     } else {
       const lbl = document.createElement('span');
       lbl.innerHTML = active ? 'Escribe abajo para empezar el hilo'
@@ -2291,6 +2336,8 @@
     if (!res.ok) return;
     const chat = await res.json();
     chatNext = chat.next || null;   // el paso siguiente de la conversación (lo decide la forja)
+    // ¿hay algún agente trabajando AHORA en este hilo? (mensaje vivo: Aubé/Miguel/Ana Liz)
+    liveEnHilo = (chat.messages || []).some((m) => m.live);
     renderNextStep();
     const msgs = chat.messages || [];
     otherCount = msgs.filter((m) => m.author !== 'tie').length;
@@ -2368,6 +2415,13 @@
     const t = currentTarea;
     tareaDefEl.style.display = 'block';
     tareaDefEl.innerHTML = '';
+    // Modo tarea: si la def es el rey (selectedId==null), resáltala como rey y deja el
+    // bloque clicable para volver a coronarla (salir de cualquier sub-hilo a la raíz).
+    tareaDefEl.classList.toggle('rey', selectedId == null);
+    tareaDefEl.onclick = (e) => {
+      if (e.target.closest('button') || e.target.closest('a')) return;
+      if (selectedId != null) { selectedId = null; if (lastChat) renderThread(lastChat); else updateSelectionUI(); }
+    };
     const eye = document.createElement('div'); eye.className = 'td-eyebrow';
     eye.textContent = 'Tarea #' + t.id;
     const h = document.createElement('h2'); h.textContent = t.title || ('Tarea ' + t.id);
@@ -2516,14 +2570,36 @@
   // Un clic = un paso. La forja decide CUÁL (determinista): si hay tarea abierta,
   // los pasos de la tarea (currentTarea.next); si es una conversación, los de la
   // conversación (chatNext, que viaja en GET /api/chats/:id). Aquí solo se DISPARA.
+  // ¿hay un paso EN CURSO ahora mismo? (un agente trabajando en el hilo abierto).
+  // Mientras lo haya, el "Siguiente paso" se bloquea: no se encadena nada encima.
+  function pasoEnCurso() {
+    if (currentTarea && (currentTarea.headlessEnCurso || []).length) return true;
+    if (liveEnHilo) return true;                          // mensaje vivo (Aubé/Miguel/Ana Liz)
+    if (!currentTarea && pendings.length) return true;    // fantasmas de William/Iris lanzados
+    return false;
+  }
+
   function renderNextStep() {
     if (!nextStepBarEl) return;
     nextStepBarEl.innerHTML = '';
     if (!active) { nextStepBarEl.style.display = 'none'; return; }
-    const next = currentTarea ? (currentTarea.next || null) : chatNext;
-    if (!next || !next.key) { nextStepBarEl.style.display = 'none'; return; }
     const b = document.createElement('button');
     b.className = 'nextstep-btn';
+    // EN CURSO: el botón se deshabilita; si lo intentas, responde "inténtalo en un minuto".
+    if (pasoEnCurso()) {
+      b.classList.add('waiting');
+      b.textContent = '⏳ Un paso está en curso…';
+      b.title = 'Hay un agente trabajando. Espera a que termine.';
+      b.onclick = () => {
+        b.textContent = '⏳ Aún trabajando — inténtalo en un minuto';
+        setTimeout(() => { if (pasoEnCurso()) b.textContent = '⏳ Un paso está en curso…'; }, 2500);
+      };
+      nextStepBarEl.appendChild(b);
+      nextStepBarEl.style.display = 'block';
+      return;
+    }
+    const next = currentTarea ? (currentTarea.next || null) : chatNext;
+    if (!next || !next.key) { nextStepBarEl.style.display = 'none'; return; }
     b.textContent = '▸ Siguiente paso: ' + next.label;
     b.title = 'Lo decide la forja, determinista. Un clic lo dispara y espera.';
     b.onclick = () => dispatchNextStep(next);
@@ -2533,6 +2609,7 @@
 
   function dispatchNextStep(next) {
     if (!next || !next.key) return;
+    if (pasoEnCurso()) { renderNextStep(); return; }   // guarda dura: nada se encadena en curso
     if (currentTarea) {
       const id = currentTarea.id;
       switch (next.key) {
@@ -2553,6 +2630,7 @@
       case 'aube':      return aube();
       case 'aprobar':   return aprobarTarea(next.msgId);   // crea la tarea desde el plan de Aubé
       case 'responder': return focusPregunta();            // no se puede auto-responder: te lleva a ella
+      case 'irtarea':   return openTarea(next.tareaId);    // la tarea ya nació → ir a ella
     }
   }
 

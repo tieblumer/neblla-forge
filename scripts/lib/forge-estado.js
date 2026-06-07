@@ -142,12 +142,15 @@ const PASO_CONV_LABEL = {
   responder: 'Responder las preguntas',
   aube: 'Crear el plan (Aubé)',
   aprobar: 'Aprobar el plan → crea la tarea',
+  irtarea: 'Ir a la tarea',
 };
 export function pasoConversacion(chat) {
   const msgs = (chat && Array.isArray(chat.messages)) ? chat.messages : [];
   if (!msgs.length) return null;
-  // ¿ya nació una tarea de aquí? (un mensaje de Aubé colapsado en stub con tareaId) → hecho
-  if (msgs.some((m) => m.tareaId != null)) return null;
+  // ¿ya nació una tarea de aquí? El plan de Aubé se colapsó en un stub con `tareaRef`
+  // → el camino de la conversación terminó; el siguiente paso es IR a esa tarea.
+  const stub = msgs.find((m) => m.tareaRef != null);
+  if (stub) return { key: 'irtarea', label: PASO_CONV_LABEL.irtarea, tareaId: stub.tareaRef };
   const tiene = (a) => msgs.some((m) => m.author === a);
   // una pregunta de un agente SIN respuesta de Tie (la respuesta cuelga por replyTo)
   const preg = msgs.find((m) => m.type === 'pregunta'
