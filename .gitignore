@@ -22,6 +22,8 @@ scripts/_work/
 .forge-browser/
 
 # sprint director (scripts/sprint.js) transients
+# ficheros de scratch que deja la batería de tests del orquestador (regenerables).
+forge/backbone/sprints/__test_orch_*
 forge/backbone/sprints/.verdict.json
 forge/backbone/sprints/.hotfix-needed.json
 forge/backbone/sprints/.coherence-advisory.md
