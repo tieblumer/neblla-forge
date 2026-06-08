@@ -93,8 +93,7 @@
     "aprobado": false,
     "aprobadoAt": null,
     "generado": true,
-    "generadoAt": "2026-06-07T13:15:00.113Z",
-    "ultimaCorrida": "2026-06-07T17:03:49.509Z"
+    "generadoAt": "2026-06-07T13:15:00.113Z"
   },
   "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t022-1780848861147",
   "branch": "miguel/tarea-022-1780848861147",
@@ -104,5 +103,8 @@
   "construido": true,
   "construidoAt": "2026-06-07T16:17:57.217Z",
   "brought": true,
-  "broughtAt": "2026-06-07T17:03:49.760Z"
+  "broughtAt": "2026-06-07T17:03:49.760Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-07T17:03:50.002Z",
+  "masterCommit": "e2368cf237a2edaf5c39a4c66361ed3e3d84baba"
 }

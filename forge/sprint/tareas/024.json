@@ -1,0 +1,284 @@
+{
+  "id": "024",
+  "num": 24,
+  "title": "Construir el \"ciclo de reconstrucción\" del forge: un orquestador que abre una rama nueva (todo el worktree pasa a la rama, no a master, para tener un master-vs-rama con qué comparar), hace que Anselmo documente todos los cambios en backbone + MCP, lanza 4 veces en paralelo al mismo apóstol con ángulos distintos (Lucas=tests, Marcos=definición, Juan=diff, Mateo=bordes/huecos) para verificar que la documentación está completa, deja que Lina+Ana Liz redacten plan y tests mirando solo tests+worktree de Anselmo, corre la batería nueva contra MASTER como \"gate de oro\", limpia de la rama todo el código que no sean los tests, vuelca plan+docs (sin los libros de los apóstoles), y suelta un Miguel gigante en ultracode que reprograma desde el código de master hasta que todos los tests pasan, con reanudación si se cae.",
+  "body": "Complejidad: compleja\n\nPartes:\n• orquestador — El driver determinista del ciclo, fence no cartel (al estilo de scripts/sprint.js + scripts/heart.js). Secuencia los pasos en orden fijo y posee ramas, worktrees, gate y caps. Pasos: (1) crear rama de ciclo y mover el worktree a ella (no a master) → guarda baseRef=master para los diffs; (2) lanzar a Anselmo a documentar TODO en backbone + reflejarlo en el MCP, sobre su propio worktree; (3) lanzar 4 veces EN PARALELO al apóstol —cada instancia arranca de cero, recibe el worktree de Anselmo + su ángulo (Lucas/Marcos/Juan/Mateo) + baseRef para el diff master-vs-rama— y devuelve su testimonio verificando que Anselmo describió bien todas las features; (4) Lina+Ana Liz redactan plan y tests mirando SOLO los tests + el worktree de Anselmo (el plan y los tests viven en ese worktree), con la lista de Mateo como entrada OBLIGATORIA que se convierte en tests nuevos; (5) GATE DE ORO: correr la batería nueva contra el código de MASTER —verde = los tests describen lo que ya existía, no inventan; rojo aborta el ciclo; (6) borrar de la rama todo el código que no sean los tests; (7) volcar la rama con el plan de Lina y la documentación de Anselmo, SIN los libros de los 4 apóstoles; (8) lanzar un Miguel gigante con esfuerzo ultracode en su propio worktree, que recibe la rama (tests+plan+docs) pero el código de master, y reprograma hasta que TODOS los tests pasan; (9) si Miguel se cae, arrancar otro que sigue desde donde lo dejó, en la misma rama (reanudación). Reutiliza worktrees.js, forge-merge.js, forge-shutdown.js, forge-tests.js/run-forge.js para correr la batería.  (ficheros: scripts/reconstruir.js, scripts/lib/forge-recon.js, scripts/lib/forge-firme.js, scripts/forge.js, scripts/sandbox/worktrees.js, scripts/lib/forge-merge.js)\n• voces — Los prompt-builders de cada rol del ciclo, sin estado de runtime (solo construyen el texto de arranque a partir de los datos que les pasa el orquestador). (a) anselmoDocPrompt: instruye a Anselmo a leer el diff master-vs-rama y documentar TODAS las features a fondo en el backbone y reflejar los cambios de feature en el MCP; (b) apostolPrompt: una sola plantilla parametrizada por ángulo que produce las 4 lentes —Lucas mira los tests (qué se garantiza), Marcos la definición de la tarea (el porqué), Juan el diff del commit (qué cambió fichero a fichero), Mateo los bordes y huecos (comportamiento real sin test)— recibe el worktree de Anselmo + baseRef y devuelve un testimonio que verifica la documentación; (c) linaReconPrompt: planifica la implementación completa mirando solo tests + worktree de Anselmo, integrando la lista de Mateo como tests obligatorios; (d) miguelGigantePrompt: reconstrucción ultracode desde código de master con tests+plan+docs como brújula, con variante de reanudación 'sigue desde donde lo dejó'.  (ficheros: scripts/lib/forge-prompts.js)\n\nContrato:\n• orquestador ↔ voces: Firmas fijas de los prompt-builders exportados por scripts/lib/forge-prompts.js, que el orquestador importa y llama. — anselmoDocPrompt({worktreeDir, baseRef, objetivo}) → string. apostolPrompt({angulo:'lucas'|'marcos'|'juan'|'mateo', worktreeDir, baseRef}) → string (una sola función, 4 ángulos). linaReconPrompt({testsDir, docsDir, huecosMateo}) → string. miguelGigantePrompt({rama, planPath, docsDir, masterRef, reanudacion:boolean}) → string. Todas devuelven SOLO el texto de arranque; ningún builder lee disco ni guarda estado. El orquestador es el único dueño de ramas/worktrees/gate y de pasar baseRef=master.",
+  "fromChat": "050",
+  "fromMsg": 8,
+  "createdAt": "2026-06-07T19:56:26.496Z",
+  "plan": {
+    "version": 1,
+    "resumen": "Construir el \"ciclo de reconstrucción\" del forge: un orquestador que abre una rama nueva (todo el worktree pasa a la rama, no a master, para tener un master-vs-rama con qué comparar), hace que Anselmo documente todos los cambios en backbone + MCP, lanza 4 veces en paralelo al mismo apóstol con ángulos distintos (Lucas=tests, Marcos=definición, Juan=diff, Mateo=bordes/huecos) para verificar que la documentación está completa, deja que Lina+Ana Liz redacten plan y tests mirando solo tests+worktree de Anselmo, corre la batería nueva contra MASTER como \"gate de oro\", limpia de la rama todo el código que no sean los tests, vuelca plan+docs (sin los libros de los apóstoles), y suelta un Miguel gigante en ultracode que reprograma desde el código de master hasta que todos los tests pasan, con reanudación si se cae.",
+    "complejidad": "compleja",
+    "partes": [
+      {
+        "name": "orquestador",
+        "hace": "El driver determinista del ciclo, fence no cartel (al estilo de scripts/sprint.js + scripts/heart.js). Secuencia los pasos en orden fijo y posee ramas, worktrees, gate y caps. Pasos: (1) crear rama de ciclo y mover el worktree a ella (no a master) → guarda baseRef=master para los diffs; (2) lanzar a Anselmo a documentar TODO en backbone + reflejarlo en el MCP, sobre su propio worktree; (3) lanzar 4 veces EN PARALELO al apóstol —cada instancia arranca de cero, recibe el worktree de Anselmo + su ángulo (Lucas/Marcos/Juan/Mateo) + baseRef para el diff master-vs-rama— y devuelve su testimonio verificando que Anselmo describió bien todas las features; (4) Lina+Ana Liz redactan plan y tests mirando SOLO los tests + el worktree de Anselmo (el plan y los tests viven en ese worktree), con la lista de Mateo como entrada OBLIGATORIA que se convierte en tests nuevos; (5) GATE DE ORO: correr la batería nueva contra el código de MASTER —verde = los tests describen lo que ya existía, no inventan; rojo aborta el ciclo; (6) borrar de la rama todo el código que no sean los tests; (7) volcar la rama con el plan de Lina y la documentación de Anselmo, SIN los libros de los 4 apóstoles; (8) lanzar un Miguel gigante con esfuerzo ultracode en su propio worktree, que recibe la rama (tests+plan+docs) pero el código de master, y reprograma hasta que TODOS los tests pasan; (9) si Miguel se cae, arrancar otro que sigue desde donde lo dejó, en la misma rama (reanudación). Reutiliza worktrees.js, forge-merge.js, forge-shutdown.js, forge-tests.js/run-forge.js para correr la batería.",
+        "ficheros": [
+          "scripts/reconstruir.js",
+          "scripts/lib/forge-recon.js",
+          "scripts/lib/forge-firme.js",
+          "scripts/forge.js",
+          "scripts/sandbox/worktrees.js",
+          "scripts/lib/forge-merge.js"
+        ]
+      },
+      {
+        "name": "voces",
+        "hace": "Los prompt-builders de cada rol del ciclo, sin estado de runtime (solo construyen el texto de arranque a partir de los datos que les pasa el orquestador). (a) anselmoDocPrompt: instruye a Anselmo a leer el diff master-vs-rama y documentar TODAS las features a fondo en el backbone y reflejar los cambios de feature en el MCP; (b) apostolPrompt: una sola plantilla parametrizada por ángulo que produce las 4 lentes —Lucas mira los tests (qué se garantiza), Marcos la definición de la tarea (el porqué), Juan el diff del commit (qué cambió fichero a fichero), Mateo los bordes y huecos (comportamiento real sin test)— recibe el worktree de Anselmo + baseRef y devuelve un testimonio que verifica la documentación; (c) linaReconPrompt: planifica la implementación completa mirando solo tests + worktree de Anselmo, integrando la lista de Mateo como tests obligatorios; (d) miguelGigantePrompt: reconstrucción ultracode desde código de master con tests+plan+docs como brújula, con variante de reanudación 'sigue desde donde lo dejó'.",
+        "ficheros": [
+          "scripts/lib/forge-prompts.js"
+        ]
+      }
+    ],
+    "contrato": [
+      {
+        "entre": [
+          "orquestador",
+          "voces"
+        ],
+        "interfaz": "Firmas fijas de los prompt-builders exportados por scripts/lib/forge-prompts.js, que el orquestador importa y llama.",
+        "acuerdo": "anselmoDocPrompt({worktreeDir, baseRef, objetivo}) → string. apostolPrompt({angulo:'lucas'|'marcos'|'juan'|'mateo', worktreeDir, baseRef}) → string (una sola función, 4 ángulos). linaReconPrompt({testsDir, docsDir, huecosMateo}) → string. miguelGigantePrompt({rama, planPath, docsDir, masterRef, reanudacion:boolean}) → string. Todas devuelven SOLO el texto de arranque; ningún builder lee disco ni guarda estado. El orquestador es el único dueño de ramas/worktrees/gate y de pasar baseRef=master."
+      }
+    ],
+    "aprobado": true,
+    "aprobadoAt": "2026-06-08T04:35:08.641Z"
+  },
+  "subtareas": [
+    {
+      "name": "orquestador",
+      "alcance": {
+        "archivos": [
+          "scripts/reconstruir.js",
+          "scripts/lib/forge-recon.js",
+          "scripts/lib/forge-firme.js",
+          "scripts/forge.js",
+          "scripts/sandbox/worktrees.js",
+          "scripts/lib/forge-merge.js"
+        ],
+        "frontera": "El driver determinista del ciclo, fence no cartel (al estilo de scripts/sprint.js + scripts/heart.js). Secuencia los pasos en orden fijo y posee ramas, worktrees, gate y caps. Pasos: (1) crear rama de ciclo y mover el worktree a ella (no a master) → guarda baseRef=master para los diffs; (2) lanzar a Anselmo a documentar TODO en backbone + reflejarlo en el MCP, sobre su propio worktree; (3) lanzar 4 veces EN PARALELO al apóstol —cada instancia arranca de cero, recibe el worktree de Anselmo + su ángulo (Lucas/Marcos/Juan/Mateo) + baseRef para el diff master-vs-rama— y devuelve su testimonio verificando que Anselmo describió bien todas las features; (4) Lina+Ana Liz redactan plan y tests mirando SOLO los tests + el worktree de Anselmo (el plan y los tests viven en ese worktree), con la lista de Mateo como entrada OBLIGATORIA que se convierte en tests nuevos; (5) GATE DE ORO: correr la batería nueva contra el código de MASTER —verde = los tests describen lo que ya existía, no inventan; rojo aborta el ciclo; (6) borrar de la rama todo el código que no sean los tests; (7) volcar la rama con el plan de Lina y la documentación de Anselmo, SIN los libros de los 4 apóstoles; (8) lanzar un Miguel gigante con esfuerzo ultracode en su propio worktree, que recibe la rama (tests+plan+docs) pero el código de master, y reprograma hasta que TODOS los tests pasan; (9) si Miguel se cae, arrancar otro que sigue desde donde lo dejó, en la misma rama (reanudación). Reutiliza worktrees.js, forge-merge.js, forge-shutdown.js, forge-tests.js/run-forge.js para correr la batería.",
+        "noTocar": [
+          "scripts/lib/forge-prompts.js"
+        ]
+      },
+      "contrato": [
+        {
+          "entre": [
+            "orquestador",
+            "voces"
+          ],
+          "interfaz": "Firmas fijas de los prompt-builders exportados por scripts/lib/forge-prompts.js, que el orquestador importa y llama.",
+          "acuerdo": "anselmoDocPrompt({worktreeDir, baseRef, objetivo}) → string. apostolPrompt({angulo:'lucas'|'marcos'|'juan'|'mateo', worktreeDir, baseRef}) → string (una sola función, 4 ángulos). linaReconPrompt({testsDir, docsDir, huecosMateo}) → string. miguelGigantePrompt({rama, planPath, docsDir, masterRef, reanudacion:boolean}) → string. Todas devuelven SOLO el texto de arranque; ningún builder lee disco ni guarda estado. El orquestador es el único dueño de ramas/worktrees/gate y de pasar baseRef=master."
+        }
+      ]
+    },
+    {
+      "name": "voces",
+      "alcance": {
+        "archivos": [
+          "scripts/lib/forge-prompts.js"
+        ],
+        "frontera": "Los prompt-builders de cada rol del ciclo, sin estado de runtime (solo construyen el texto de arranque a partir de los datos que les pasa el orquestador). (a) anselmoDocPrompt: instruye a Anselmo a leer el diff master-vs-rama y documentar TODAS las features a fondo en el backbone y reflejar los cambios de feature en el MCP; (b) apostolPrompt: una sola plantilla parametrizada por ángulo que produce las 4 lentes —Lucas mira los tests (qué se garantiza), Marcos la definición de la tarea (el porqué), Juan el diff del commit (qué cambió fichero a fichero), Mateo los bordes y huecos (comportamiento real sin test)— recibe el worktree de Anselmo + baseRef y devuelve un testimonio que verifica la documentación; (c) linaReconPrompt: planifica la implementación completa mirando solo tests + worktree de Anselmo, integrando la lista de Mateo como tests obligatorios; (d) miguelGigantePrompt: reconstrucción ultracode desde código de master con tests+plan+docs como brújula, con variante de reanudación 'sigue desde donde lo dejó'.",
+        "noTocar": [
+          "scripts/reconstruir.js",
+          "scripts/lib/forge-recon.js",
+          "scripts/lib/forge-firme.js",
+          "scripts/forge.js",
+          "scripts/sandbox/worktrees.js",
+          "scripts/lib/forge-merge.js"
+        ]
+      },
+      "contrato": [
+        {
+          "entre": [
+            "orquestador",
+            "voces"
+          ],
+          "interfaz": "Firmas fijas de los prompt-builders exportados por scripts/lib/forge-prompts.js, que el orquestador importa y llama.",
+          "acuerdo": "anselmoDocPrompt({worktreeDir, baseRef, objetivo}) → string. apostolPrompt({angulo:'lucas'|'marcos'|'juan'|'mateo', worktreeDir, baseRef}) → string (una sola función, 4 ángulos). linaReconPrompt({testsDir, docsDir, huecosMateo}) → string. miguelGigantePrompt({rama, planPath, docsDir, masterRef, reanudacion:boolean}) → string. Todas devuelven SOLO el texto de arranque; ningún builder lee disco ni guarda estado. El orquestador es el único dueño de ramas/worktrees/gate y de pasar baseRef=master."
+        }
+      ]
+    }
+  ],
+  "paralelizadoAt": "2026-06-07T19:56:26.502Z",
+  "threadId": "053",
+  "testsPlan": {
+    "version": 1,
+    "tests": [
+      {
+        "ref": "voces",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "anselmoDocPrompt arma la instrucción de documentar a fondo el diff",
+        "dado": "anselmoDocPrompt({worktreeDir, baseRef, objetivo}) con baseRef='master' y un worktreeDir concreto",
+        "cuando": "se llama el builder",
+        "entonces": "devuelve un string que (a) instruye leer el diff master-vs-rama usando baseRef, (b) pide documentar TODAS las features en el backbone y reflejar los cambios en el MCP, y (c) incrusta worktreeDir, baseRef y objetivo en el texto",
+        "id": "T-24-01"
+      },
+      {
+        "ref": "voces",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "apostolPrompt es una sola función con 4 ángulos distintos",
+        "dado": "apostolPrompt({angulo, worktreeDir, baseRef}) llamada con angulo 'lucas', 'marcos', 'juan' y 'mateo'",
+        "cuando": "se generan los cuatro prompts con los mismos worktreeDir/baseRef",
+        "entonces": "se exporta UNA sola función y los cuatro strings son distintos entre sí, y cada uno refleja su lente (lucas=los tests/qué se garantiza, marcos=la definición/el porqué, juan=el diff fichero a fichero, mateo=bordes y huecos sin test)",
+        "id": "T-24-02"
+      },
+      {
+        "ref": "voces",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "cada ángulo del apóstol recibe el worktree de Anselmo y baseRef para el diff",
+        "dado": "apostolPrompt para cualquiera de los cuatro ángulos",
+        "cuando": "se genera el prompt con worktreeDir (el de Anselmo) y baseRef='master'",
+        "entonces": "el string incrusta el worktreeDir de Anselmo y baseRef, y pide verificar que la documentación describe bien todas las features",
+        "id": "T-24-03"
+      },
+      {
+        "ref": "voces",
+        "nivel": "temporal",
+        "estado": "definido",
+        "titulo": "apostolPrompt no revienta con un ángulo desconocido",
+        "dado": "apostolPrompt llamada con un angulo no contemplado o vacío",
+        "cuando": "se invoca el builder",
+        "entonces": "no lanza excepción y devuelve un string (degradación segura, nunca crash)",
+        "id": "T-24-04"
+      },
+      {
+        "ref": "voces",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "linaReconPrompt convierte la lista de Mateo en tests obligatorios y limita la vista",
+        "dado": "linaReconPrompt({testsDir, docsDir, huecosMateo}) con una lista de huecos de Mateo no vacía",
+        "cuando": "se genera el prompt",
+        "entonces": "el string (a) marca los huecos de Mateo como entrada OBLIGATORIA que se vuelve tests nuevos, y (b) instruye planificar mirando SOLO los tests + el worktree/documentación de Anselmo (testsDir/docsDir), no el código vivo",
+        "id": "T-24-05"
+      },
+      {
+        "ref": "voces",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "miguelGigantePrompt ordena reconstruir en ultracode desde el código de master",
+        "dado": "miguelGigantePrompt({rama, planPath, docsDir, masterRef, reanudacion:false})",
+        "cuando": "se genera el prompt",
+        "entonces": "el string pide reconstruir con esfuerzo ultracode partiendo del código de masterRef, usando los tests+plan(planPath)+docs(docsDir) como brújula, hasta que TODOS los tests pasen, e incrusta la rama",
+        "id": "T-24-06"
+      },
+      {
+        "ref": "voces",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "la variante de reanudación de Miguel cambia el texto",
+        "dado": "miguelGigantePrompt con reanudacion:true frente a reanudacion:false (mismos demás args)",
+        "cuando": "se comparan ambos strings",
+        "entonces": "con reanudacion:true el texto incluye la consigna de 'seguir desde donde lo dejó' (continuar en la misma rama, no empezar de cero) y con reanudacion:false no la incluye; los dos strings difieren",
+        "id": "T-24-07"
+      },
+      {
+        "ref": "voces",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "los prompt-builders son puros y deterministas",
+        "dado": "cualquiera de los builders (anselmoDocPrompt, apostolPrompt, linaReconPrompt, miguelGigantePrompt)",
+        "cuando": "se llama dos veces con los mismos argumentos",
+        "entonces": "devuelve exactamente el mismo string ambas veces y no lee disco, store ni variables de entorno (función pura; solo construye texto)",
+        "id": "T-24-08"
+      },
+      {
+        "ref": "orquestador",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "abre rama de ciclo, mueve el worktree a ella y guarda baseRef=master",
+        "dado": "el orquestador del ciclo de reconstrucción al arrancar (con git mockeado)",
+        "cuando": "ejecuta el paso 1",
+        "entonces": "crea una rama de ciclo nueva, deja el worktree en esa rama (NO en master) para tener un master-vs-rama comparable, y registra baseRef='master' para los diffs",
+        "id": "T-24-09"
+      },
+      {
+        "ref": "orquestador",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "el orquestador es un fence: ejecuta los pasos en orden fijo 1→9",
+        "dado": "el driver determinista del ciclo",
+        "cuando": "corre el ciclo completo (con todo mockeado y el gate verde)",
+        "entonces": "ejecuta en secuencia rama → Anselmo documenta → 4 apóstoles → Lina+Ana Liz plan/tests → gate de oro → limpieza de código → volcado plan+docs → Miguel gigante, sin saltarse ni reordenar pasos",
+        "id": "T-24-10"
+      },
+      {
+        "ref": "orquestador",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "lanza los 4 apóstoles EN PARALELO, mismo apóstol, 4 ángulos",
+        "dado": "el paso 3 del orquestador con el worktree de Anselmo ya listo",
+        "cuando": "verifica la documentación",
+        "entonces": "lanza 4 instancias EN PARALELO del mismo apóstol, cada una arrancando de cero con uno de los ángulos (lucas/marcos/juan/mateo) + el worktree de Anselmo + baseRef, y recoge los 4 testimonios",
+        "id": "T-24-11"
+      },
+      {
+        "ref": "orquestador",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "gate de oro verde deja continuar el ciclo",
+        "dado": "la batería nueva de tests corrida contra el código de MASTER",
+        "cuando": "el gate de oro sale verde",
+        "entonces": "el ciclo continúa hacia la limpieza, el volcado y el lanzamiento de Miguel (la batería describe lo que ya existía)",
+        "id": "T-24-12"
+      },
+      {
+        "ref": "orquestador",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "gate de oro rojo aborta el ciclo y no lanza a Miguel",
+        "dado": "la batería nueva corrida contra MASTER",
+        "cuando": "el gate de oro sale rojo (algún test falla)",
+        "entonces": "el orquestador ABORTA el ciclo: no limpia, no vuelca y NO lanza al Miguel gigante (los tests inventaban comportamiento)",
+        "id": "T-24-13"
+      },
+      {
+        "ref": "orquestador",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "la limpieza deja en la rama solo los tests",
+        "dado": "el paso 6 tras pasar el gate",
+        "cuando": "el orquestador limpia la rama",
+        "entonces": "borra de la rama todo el código que NO sean los tests, dejando los ficheros de test (más plan/docs) y quitando la implementación",
+        "id": "T-24-14"
+      },
+      {
+        "ref": "orquestador",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "el volcado lleva plan+docs pero NO los libros de los apóstoles",
+        "dado": "el paso 7 (volcar la rama)",
+        "cuando": "el orquestador vuelca la rama",
+        "entonces": "el resultado incluye el plan de Lina y la documentación de Anselmo, pero EXCLUYE los 4 testimonios/libros de los apóstoles (Lucas/Marcos/Juan/Mateo)",
+        "id": "T-24-15"
+      },
+      {
+        "ref": "orquestador",
+        "nivel": "persistente",
+        "estado": "definido",
+        "titulo": "reanudación: si Miguel cae, otro sigue en la misma rama",
+        "dado": "el Miguel gigante del paso 8 que se cae a medias",
+        "cuando": "el orquestador detecta la caída",
+        "entonces": "arranca otro Miguel con reanudacion=true sobre la MISMA rama (continúa desde donde lo dejó), sin empezar la reconstrucción de cero",
+        "id": "T-24-16"
+      },
+      {
+        "ref": "orquestador",
+        "nivel": "temporal",
+        "estado": "definido",
+        "titulo": "Anselmo y Miguel trabajan cada uno en su propio worktree",
+        "dado": "el orquestador reutilizando la plumbing de worktrees.js (mockeada)",
+        "cuando": "lanza a Anselmo (paso 2) y al Miguel gigante (paso 8)",
+        "entonces": "cada uno recibe su PROPIO git worktree aislado y el orquestador lo crea y lo desmonta usando worktrees.js/forge-merge.js",
+        "id": "T-24-17"
+      }
+    ],
+    "aprobado": false,
+    "aprobadoAt": null,
+    "generado": true,
+    "generadoAt": "2026-06-08T04:36:53.592Z"
+  }
+}

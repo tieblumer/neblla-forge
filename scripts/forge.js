@@ -51,6 +51,7 @@ import { listPeople, readPerson, writePerson, findByRol } from './lib/forge-peop
 import {
   trackStart, trackEnd, activeCount, scheduleRestart, setOnDrained, statusShort, statusFull,
 } from './lib/forge-shutdown.js';
+import { decidir as decidirAutostart, readAutoStart, writeAutoStart } from './lib/forge-autostart.js';
 
 const PROJECT_ROOT = resolveProjectRoot();
 
@@ -934,6 +935,65 @@ setOnDrained(() => {
   setTimeout(() => { process.exit(0); }, 5000);
 });
 
+// ── arranque automático ──────────────────────────────────────────────────────
+// Con el flag en ON, un ticker interno (autostartTick, cada ~60s) consulta el
+// cerebro PURO `decidir()` y, cuando la ventana de 5h se ha recuperado y no hay
+// nadie construyendo, lanza la tarea pendiente más antigua —de una en una—. La
+// forja no se despierta a sí misma: sigue viva, solo ociosa, y el ticker dispara
+// cuando hay hueco.
+//
+// El último veredicto se guarda en una var de módulo para que el GET lo exponga
+// SIEMPRE (la forma fija del contrato) sin recalcular nada en la petición.
+let ultimoVeredictoAutostart = { accion: 'nada', estado: 'off', proximaVentana: null };
+let pendientesAutostart = 0;
+
+// Reúne las señales del momento y consulta decidir(). Si manda 'lanzar', arranca
+// la construcción por el mismo embudo que /ejecutar. Async porque mide el uso.
+async function autostartTick() {
+  try {
+    const { on } = readAutoStart(ROOT);
+    const { phase } = statusFull();
+    // las tareas pendientes de CONSTRUIR = las decoradas cuyo paso recomendado es
+    // 'ejecutar', ordenadas por num ascendente (la más antigua primero).
+    const pendientes = ordenarTareas(listTareas(ROOT))
+      .filter((t) => t.next && t.next.key === 'ejecutar')
+      .map((t) => ({ num: t.num, id: t.id }))
+      .sort((a, b) => (a.num || 0) - (b.num || 0));
+    pendientesAutostart = pendientes.length;
+    let usagePrimary = null;
+    try { usagePrimary = (await fetchUsage()).primary || null; } catch { usagePrimary = null; }
+    const veredicto = decidirAutostart({ on, phase, activeAgents: activeCount(), usagePrimary, pendientes });
+    ultimoVeredictoAutostart = veredicto;
+    if (veredicto.accion === 'lanzar' && veredicto.tareaId != null) {
+      console.log(`[forge] arranque automático: lanzo la tarea ${veredicto.tareaId} (${veredicto.motivo}).`);
+      try { arrancarConstruccion(veredicto.tareaId, {}); }
+      catch (e) { console.error('[forge] arranque automático no pudo lanzar:', e.message); }
+    }
+  } catch (e) {
+    console.error('[forge] tick de arranque automático reventó:', e.message);
+  }
+}
+
+// GET: la forma fija del contrato, derivada del flag + el último veredicto.
+app.get('/api/forge/autostart', (_req, res) => {
+  const { on } = readAutoStart(ROOT);
+  const v = ultimoVeredictoAutostart || {};
+  const estado = on ? (v.estado || 'sin-pendientes') : 'off';
+  const proximaVentana = (estado === 'esperando') ? (v.proximaVentana || null) : null;
+  res.json({ on, estado, proximaVentana, pendientes: pendientesAutostart });
+});
+
+// POST: persiste el flip a disco y dispara un latido inmediato del ticker (sin
+// que la respuesta dependa de ese latido). Idempotente.
+app.post('/api/forge/autostart', (req, res) => {
+  const on = !!(req.body && req.body.on);
+  const saved = writeAutoStart(ROOT, { on });
+  res.json({ ok: true, on: saved.on });
+  // un latido de inmediato para que el front vea el estado real sin esperar 60s.
+  // Se dispara DESPUÉS de responder: la respuesta no depende de él.
+  autostartTick().catch(() => {});
+});
+
 app.get('/', (_req, res) => {
   if (!fs.existsSync(FORGE_HTML)) return res.status(500).send('forge/index.html no encontrado');
   res.type('html').send(fs.readFileSync(FORGE_HTML, 'utf8'));
@@ -1648,6 +1708,12 @@ app.post('/api/tareas', (req, res) => {
     let aube = null;
     if (req.body.fromMsg != null) aube = msgs.find((m) => m.id === Number(req.body.fromMsg) && m.author === 'aube');
     if (!aube) aube = msgs.find((m) => m.author === 'aube');
+    // GUARD anti-doble-aprobación: si el mensaje de Aubé YA parió una tarea (es un
+    // stub, tiene tareaRef), no se vuelve a aprobar — si no, se crea una tarea basura
+    // con el texto del stub ("[Tarea NNN creada: …]") y se machaca el link al original.
+    if (aube && aube.tareaRef != null) {
+      return res.status(409).json({ error: 'ese plan ya creó una tarea', tareaId: aube.tareaRef, alreadyTask: true });
+    }
     if (aube) {
       aubeText = String(aube.text);
       aubePlan = aube.plan || null;   // fuente canónica si vino del MCP
@@ -2023,10 +2089,16 @@ app.post('/api/tareas/:id/definicion', (req, res) => {
 // del ciclo). No toca el árbol vivo. Miguel reporta en el hilo de la tarea por
 // `contestar`. En Spike el worktree es desechable. (Limpieza del worktree y revisor
 // de PR independiente = pendientes, ver backbone.)
-app.post('/api/tareas/:id/ejecutar', (req, res) => {
+// Arranca la construcción de UNA tarea: limpia el worktree viejo, abre uno nuevo
+// desde el estado vivo, siembra la diana, crea el mensaje vivo de Miguel y lanza
+// el headless. Factorizado del endpoint /ejecutar para que el ticker del arranque
+// automático use EXACTAMENTE el mismo punto de entrada (una sola puerta de build).
+// Devuelve {spawned, worktree, branch, threadId, liveMsgId}; lanza Error con
+// `.status` (404 si no hay tarea, 500 si algo de infra falla).
+function arrancarConstruccion(tareaId, opts = {}) {
   let tarea;
-  try { tarea = ensureTareaThread(ROOT, req.params.id); }
-  catch (e) { return res.status(404).json({ error: e.message }); }
+  try { tarea = ensureTareaThread(ROOT, tareaId); }
+  catch (e) { const err = new Error(e.message); err.status = 404; throw err; }
 
   const repo = targetRoot();
   // re-Ejecutar empieza de cero: si quedó un worktree de un intento anterior, lo
@@ -2049,7 +2121,7 @@ app.post('/api/tareas/:id/ejecutar', (req, res) => {
   const base = snapshotLiveCommit(repo) || 'HEAD';
   const r = spawnSync('git', ['-C', repo, 'worktree', 'add', '-b', branch, wtPath, base], { encoding: 'utf8' });
   if (r.status !== 0) {
-    return res.status(500).json({ error: 'no pude crear el worktree: ' + ((r.stderr || '').trim() || (r.error && r.error.message) || 'git falló') });
+    throw new Error('no pude crear el worktree: ' + ((r.stderr || '').trim() || (r.error && r.error.message) || 'git falló'));
   }
   console.log(`[forge] worktree de la tarea ${tarea.id} parte del estado vivo (base ${base === 'HEAD' ? 'HEAD' : base.slice(0, 8)}).`);
   // recuerda el worktree Y LA BASE en la tarea → al traer, el delta completo del
@@ -2096,7 +2168,7 @@ app.post('/api/tareas/:id/ejecutar', (req, res) => {
       text: '🔨 Miguel está arrancando…',
     });
     try { setMessageLive(ROOT, tarea.threadId, liveMsg.id, true); } catch {}
-  } catch (e) { return res.status(500).json({ error: 'no pude crear el mensaje de Miguel: ' + e.message }); }
+  } catch (e) { throw new Error('no pude crear el mensaje de Miguel: ' + e.message); }
 
   const definicion = `${tarea.title}\n\n${tarea.body || ''}`.trim();
   launchHeadless({
@@ -2109,7 +2181,7 @@ app.post('/api/tareas/:id/ejecutar', (req, res) => {
       threadText: buildThreadText(tarea.threadId),
       definicion,
       target: targetDesc(),
-      steer: req.body && req.body.steer,
+      steer: opts.steer,
       voz: vozDe('miguel'),
       tests: planTests.tests,            // su DIANA (las definiciones de Ana Liz)
       puedeCorrerTests: hayEscritos,     // ¿hay fichero de test sembrado que correr?
@@ -2137,7 +2209,16 @@ app.post('/api/tareas/:id/ejecutar', (req, res) => {
     },
   });
   console.log(`[forge] Ejecutar tarea ${tarea.id} → Miguel en worktree ${wtPath} (rama ${branch}).`);
-  res.status(202).json({ spawned: true, worktree: wtPath, branch, threadId: tarea.threadId, liveMsgId: liveMsg.id });
+  return { spawned: true, worktree: wtPath, branch, threadId: tarea.threadId, liveMsgId: liveMsg.id };
+}
+
+app.post('/api/tareas/:id/ejecutar', (req, res) => {
+  try {
+    const out = arrancarConstruccion(req.params.id, { steer: req.body && req.body.steer });
+    res.status(202).json(out);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
 });
 
 // ¿Hay algo que TRAER de la tarea? (worktree existe + tiene cambios + no traída ya).
@@ -2525,5 +2606,10 @@ app.listen(PORT, () => {
   console.log(`Forge en ${url}`);
   sweepOrphanLiveBuildsAtBoot();
   setInterval(vigilarBuildsVivos, 30 * 1000);
+  // ticker del arranque automático: cada ~60s consulta decidir() y, si toca,
+  // lanza la pendiente más antigua. Un primer latido al arrancar deja el GET con
+  // un veredicto real desde el minuto cero.
+  setInterval(() => { autostartTick().catch(() => {}); }, 60 * 1000);
+  autostartTick().catch(() => {});
   openBrowser(url);
 });

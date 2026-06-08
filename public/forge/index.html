@@ -82,6 +82,12 @@
   .forge-status.on { color: #3ad07a; border-color: rgba(58,208,122,.4); }
   .forge-status.draining { color: #e0a23a; border-color: rgba(224,162,58,.5); }
   .forge-status.down { color: #ff6b6b; border-color: rgba(255,107,107,.5); }
+  /* interruptor de arranque automático (junto a la lucecita de estado) */
+  .autostart-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 11px;
+    color: var(--muted); user-select: none; cursor: pointer; margin-right: 8px; white-space: nowrap; }
+  .autostart-toggle input { margin: 0; cursor: pointer; }
+  .autostart-toggle .autostart-label { font-weight: 600; }
+  .autostart-toggle .autostart-hint { color: var(--muted); font-style: italic; opacity: .8; }
   /* modal de uso (desglose de las ventanas) */
   .usage-modal { display: none; position: fixed; inset: 0; z-index: 1200; padding: 24px;
     background: rgba(0,0,0,.7); align-items: center; justify-content: center; }
@@ -783,6 +789,11 @@
     <!-- DERECHA: los mandos que no son el viaje -->
     <div class="bar-right">
       <span class="forge-status on" id="forgeStatus" title="Estado de la forja y nº de claudes activos">🟢 encendida</span>
+      <label class="autostart-toggle" id="autostartToggle" title="Arranque automático: con la ventana de 5h recuperada y sin nadie construyendo, la forja lanza sola las tareas pendientes, de una en una.">
+        <input type="checkbox" id="autostartCheck">
+        <span class="autostart-label">Arranque automático</span>
+        <span class="autostart-hint" id="autostartHint"></span>
+      </label>
       <span class="usage-chip" id="usageChip" title="Uso de la ventana de 5h de tu suscripción">5h —</span>
       <button class="tp-btn" id="btnTeam" title="Ver y editar los perfiles del equipo (descripción y modelo de cada empleado)">👥 Equipo</button>
       <button class="tp-btn" id="btnRestart" title="Apagado ordenado: deja de aceptar trabajo nuevo, espera a que los claudes terminen y queda lista para reinicio manual">⟳ Schedule restart</button>
@@ -3447,6 +3458,68 @@
     }
   }
 
+  // ── arranque automático: el interruptor de la cabecera ───────────────────────
+  const autostartCheck = document.getElementById('autostartCheck');
+  const autostartHint = document.getElementById('autostartHint');
+
+  // resetsAt (ISO) → "HH:MM" local, para el texto de espera de la ventana de 5h.
+  function horaMinuto(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  // Pinta el toggle en su posición real (on/off) + la línea de hint según el estado
+  // que devuelve el back. data = {on, estado, proximaVentana, pendientes}.
+  function pintarAutostart(data) {
+    if (!data) return;
+    autostartCheck.checked = !!data.on;
+    let hint = '';
+    switch (data.estado) {
+      case 'off':
+        hint = 'apagado';
+        break;
+      case 'esperando': {
+        const hm = horaMinuto(data.proximaVentana);
+        hint = 'esperando a que se recupere la ventana de 5h' + (hm ? ' (se recupera ~' + hm + ')' : '');
+        break;
+      }
+      case 'lanzando':
+        hint = 'construyendo las tareas pendientes…';
+        break;
+      case 'sin-pendientes':
+        hint = 'sin tareas pendientes que lanzar';
+        break;
+      default:
+        hint = data.on ? '' : 'apagado';
+    }
+    autostartHint.textContent = hint;
+  }
+
+  // Lee el estado del arranque automático (forma fija del contrato). Se cuelga del
+  // poll de la forja (NO abre una sonda propia).
+  async function refreshAutostart() {
+    try {
+      const r = await fetch('/api/forge/autostart');
+      if (r.ok) pintarAutostart(await r.json());
+    } catch { /* el poll lo reintenta */ }
+  }
+
+  // Al pulsar el interruptor: persiste el flip y refresca el estado pintado.
+  autostartCheck.onchange = async () => {
+    const on = autostartCheck.checked;
+    try {
+      const r = await fetch('/api/forge/autostart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ on }),
+      });
+      if (r.ok) pintarAutostart(await r.json());
+    } catch { /* deja el poll reconciliar */ }
+    refreshAutostart();
+  };
+
   // Sonda propia (independiente del pollTimer del chat): pega a /api/forge/status
   // cada ~3s en marcha normal y baja a ~1/min cuando esperamos el reinicio.
   let forgePollTick = 0;
@@ -3459,6 +3532,8 @@
       if (r.ok) st = await r.json(); else st = null;
     } catch { st = null; }
     pintarForgeStatus(st);
+    // el arranque automático se sondea AQUÍ, colgado del mismo poll (sin sonda nueva).
+    refreshAutostart();
     // la forja volvió a marcha normal (reinicio manual hecho): salimos de la espera.
     if (st && !st.apagandose && esperandoReinicio) {
       esperandoReinicio = false;
@@ -3496,6 +3571,7 @@
     loadCycle();
     loadUsage();
     setInterval(loadUsage, 4 * 60 * 1000);
+    refreshAutostart();
     pollForgeStatus();
     setInterval(pollForgeStatus, 3000);
     loadTareas();
