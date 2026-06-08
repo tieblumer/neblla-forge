@@ -1616,10 +1616,14 @@ app.post('/api/chats/:id/aube', (req, res) => {
 
   const fresh = readChat(ROOT, id) || chat;
   const msgs = fresh.messages || [];
-  let existing = msgs.find((m) => m.author === 'aube');
+  // Reusa el mensaje de Aubé SOLO si todavía NO parió tarea (no es un stub). Si el
+  // único Aubé del hilo ya es un link a una tarea (tareaRef), este nuevo plan arranca
+  // en un mensaje NUEVO → cada tarea deja SU propio link y se ven todos (antes el
+  // segundo plan reusaba el stub y machacaba el link del primero).
+  let existing = msgs.find((m) => m.author === 'aube' && m.tareaRef == null);
   const lastId = msgs.length ? msgs[msgs.length - 1].id : '';
-  // mensaje VIVO de Aubé: si ya tiene uno, lo reusa (lo reescribirá con el plan); si
-  // no, crea un PLACEHOLDER que sirve de latido y que su plan final reemplazará.
+  // mensaje VIVO de Aubé: si ya tiene uno (sin estrenar), lo reusa (lo reescribirá con
+  // el plan); si no, crea un PLACEHOLDER que sirve de latido y que su plan reemplazará.
   if (!existing) {
     try { existing = appendMessage(ROOT, id, { type: 'tarea', author: 'aube', intent: 'answer', replyTo: (lastId || null), text: '✦ Aubé está replanteando…' }); }
     catch (e) { return res.status(500).json({ error: 'no pude crear el mensaje de Aubé: ' + e.message }); }

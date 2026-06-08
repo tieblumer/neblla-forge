@@ -548,6 +548,187 @@ function dianaLineas(tests, puedeCorrerTests) {
   ];
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CICLO DE RECONSTRUCCIÓN — las voces del orquestador (scripts/reconstruir.js).
+//
+// Cuatro builders PUROS (Contrato B: `({…}) → string`, sin disco/env/store). El
+// orquestador es el dueño de ramas/worktrees/gate; estos solo redactan el texto
+// de arranque a partir de los datos que el orquestador les pasa.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Anselmo (documentar) — lee el diff master-vs-rama y lo escribe a fondo ────
+// El orquestador ya movió todo el trabajo a una rama de ciclo; `baseRef` (=master)
+// es el punto de comparación. Anselmo documenta TODAS las features tocadas en el
+// backbone y refleja los cambios de feature en el MCP. Trabaja en SU worktree.
+export function anselmoDocPrompt({ worktreeDir, baseRef, objetivo }) {
+  const wt = String(worktreeDir == null ? '' : worktreeDir);
+  const base = String(baseRef == null ? '' : baseRef);
+  const obj = String(objetivo == null ? '' : objetivo).trim() || 'el forge';
+  return [
+    'Eres Anselmo, el cronista de Neblla — el de la palabra escrita, seco y fiel. Tu',
+    'encargo en el ciclo de reconstrucción: DOCUMENTAR A FONDO todo lo que cambió.',
+    '',
+    '━━━ DÓNDE TRABAJAS ━━━',
+    'Tu worktree aislado es: ' + wt,
+    'Trabaja SOLO ahí (no toques el árbol vivo).',
+    '',
+    '━━━ QUÉ MIRAS ━━━',
+    'Lee el DIFF entre master y esta rama de ciclo: el punto de comparación es',
+    'baseRef = ' + base + '. Ese diff (master-vs-rama) es la lista exacta de lo que',
+    'cambió respecto a master — recórrelo entero, fichero a fichero.',
+    'El objetivo del ciclo es: ' + obj + '.',
+    '',
+    '━━━ QUÉ ESCRIBES ━━━',
+    '1. Documenta TODAS las features tocadas, A FONDO, en el backbone (cada feature:',
+    '   qué hace, cómo, qué garantiza, qué bordes tiene). No dejes ninguna sin cubrir.',
+    '2. Refleja los cambios de cada feature también en el MCP, para que la herramienta',
+    '   describa de verdad lo que el código hace ahora.',
+    'Sé exhaustivo y literal: esta documentación es la ÚNICA brújula con la que luego',
+    'se reconstruirá el código desde cero. Si te dejas algo, se pierde.',
+    '',
+    CIERRE_CONTESTAR,
+  ].join('\n');
+}
+
+// ── Apóstol (verificar la documentación) — UNA función, CUATRO lentes ────────
+// El orquestador lanza esta MISMA función 4 veces EN PARALELO, cada instancia
+// arranca de cero con un `angulo` distinto. Cada lente mira el cambio desde otro
+// sitio para verificar que Anselmo documentó bien TODAS las features. Recibe el
+// worktree de Anselmo + `baseRef` para poder diffear master-vs-rama.
+// Degradación segura: un ángulo desconocido NO revienta — devuelve un string
+// EXPLÍCITAMENTE marcado como inválido (nunca una de las 4 lentes por sorpresa).
+const APOSTOL_LENTES = {
+  lucas:
+    'TU LENTE — LOS TESTS (qué se GARANTIZA). Mira los tests y comprueba que la\n'
+    + 'documentación de Anselmo refleja exactamente lo que esos tests aseguran de cada\n'
+    + 'feature: cada garantía debe estar contada en el backbone.',
+  marcos:
+    'TU LENTE — LA DEFINICIÓN de la tarea (el PORQUÉ). Mira la definición/objetivo de\n'
+    + 'la tarea y comprueba que la documentación explica el PORQUÉ de cada feature, no\n'
+    + 'solo el qué: que el propósito quedó escrito y es fiel a lo que se pidió.',
+  juan:
+    'TU LENTE — EL DIFF, fichero a fichero (qué CAMBIÓ). Recorre el diff master-vs-rama\n'
+    + 'fichero a fichero y comprueba que CADA cambio de código tiene su reflejo en la\n'
+    + 'documentación: ningún fichero tocado puede quedar sin documentar.',
+  mateo:
+    'TU LENTE — LOS BORDES Y HUECOS (comportamiento real SIN test). Caza el comportamiento\n'
+    + 'que el código tiene pero ningún test cubre ni la documentación menciona: los bordes\n'
+    + 'y huecos. Devuelve una LISTA de esos huecos — serán tests obligatorios nuevos.',
+};
+export function apostolPrompt({ angulo, worktreeDir, baseRef }) {
+  const wt = String(worktreeDir == null ? '' : worktreeDir);
+  const base = String(baseRef == null ? '' : baseRef);
+  const key = String(angulo == null ? '' : angulo).trim().toLowerCase();
+  const lente = APOSTOL_LENTES[key];
+  if (!lente) {
+    // Rechazo EXPLÍCITO (nunca silencioso, nunca una lente válida disfrazada):
+    return [
+      '[ÁNGULO INVÁLIDO / DESCONOCIDO] No reconozco el ángulo de apóstol "' + key + '".',
+      'Los ángulos válidos son: lucas, marcos, juan, mateo. No puedo generar un',
+      'testimonio sin una lente válida — pídeme uno de los cuatro.',
+    ].join('\n');
+  }
+  return [
+    'Eres un apóstol del ciclo de reconstrucción de Neblla. Arrancas de CERO y tu',
+    'misión es VERIFICAR que la documentación que escribió Anselmo describe bien',
+    'TODAS las features — desde TU ángulo, sin fiarte de los otros apóstoles.',
+    '',
+    '━━━ DÓNDE MIRAS ━━━',
+    'El worktree de Anselmo (su documentación y el código) está en: ' + wt,
+    'Para ver qué cambió, diffea master-vs-rama usando baseRef = ' + base + '.',
+    '',
+    '━━━ ' + key.toUpperCase() + ' ━━━',
+    lente,
+    '',
+    '━━━ TU TESTIMONIO ━━━',
+    'Comprueba si la documentación del backbone describe bien todas las features desde',
+    'tu lente. Confirma lo que esté bien cubierto y señala con precisión lo que falte',
+    'o esté mal contado. Tu testimonio es una verificación, no una opinión vaga.',
+    '',
+    CIERRE_CONTESTAR,
+  ].join('\n');
+}
+
+// ── Lina (plan de reconstrucción) — planifica mirando SOLO tests + docs ──────
+// Lina (con Ana Liz) redacta el plan de implementación mirando ÚNICAMENTE los
+// tests y el worktree/documentación de Anselmo — NO el código vivo (que se va a
+// borrar). La lista de huecos de Mateo entra como tests OBLIGATORIOS nuevos.
+export function linaReconPrompt({ testsDir, docsDir, huecosMateo }) {
+  const td = String(testsDir == null ? '' : testsDir);
+  const dd = String(docsDir == null ? '' : docsDir);
+  const huecos = Array.isArray(huecosMateo) ? huecosMateo.filter((h) => String(h || '').trim()) : [];
+  const bloqueHuecos = huecos.length
+    ? [
+        '━━━ HUECOS DE MATEO — ENTRADA OBLIGATORIA ━━━',
+        'Mateo cazó comportamiento sin test. Estos huecos son OBLIGATORIOS: cada uno se',
+        'convierte en un TEST NUEVO del plan (no son opcionales, no los puedes saltar):',
+        ...huecos.map((h, i) => '  ' + (i + 1) + '. ' + h),
+        '',
+      ]
+    : [];
+  return [
+    'Eres Lina, la planificadora de Neblla (con Ana Liz al lado para los tests). Tu',
+    'encargo: redactar el PLAN COMPLETO de reconstrucción de esta rama.',
+    '',
+    '━━━ QUÉ PUEDES MIRAR (y SOLO eso) ━━━',
+    'Mira SOLO dos cosas: los tests en ' + td + ' y la documentación/worktree de',
+    'Anselmo en ' + dd + '. NO mires el código vivo: NO leas el código de la',
+    'implementación — se va a borrar y reconstruir desde master. Si planificas mirando',
+    'el código vivo, copias en vez de reconstruir. Tu única verdad son tests + docs.',
+    '',
+    ...bloqueHuecos,
+    '━━━ QUÉ ENTREGAS ━━━',
+    'Un plan con el que un Miguel pueda reprogramar la feature entera sin adivinar:',
+    'qué piezas, qué contratos, en qué orden. Los huecos de Mateo (si los hay) ya son',
+    'tests obligatorios del plan; intégralos como tales.',
+  ].join('\n');
+}
+
+// ── Miguel gigante (reconstruir) — ultracode desde el código de master ───────
+// El orquestador limpió la rama (solo tests + plan + docs) y le da a Miguel el
+// CÓDIGO de master como punto de partida: Miguel reprograma desde master usando
+// tests+plan+docs como brújula, hasta que TODOS los tests pasen. La variante
+// `reanudacion` se usa cuando un Miguel anterior se cayó: el nuevo continúa en la
+// MISMA rama desde donde lo dejó, en vez de empezar de cero.
+export function miguelGigantePrompt({ rama, planPath, docsDir, masterRef, reanudacion }) {
+  const r = String(rama == null ? '' : rama);
+  const plan = String(planPath == null ? '' : planPath);
+  const docs = String(docsDir == null ? '' : docsDir);
+  const master = String(masterRef == null ? '' : masterRef) || 'master';
+  const arranque = reanudacion
+    ? [
+        '━━━ REANUDACIÓN — SIGUE DESDE DONDE LO DEJÓ ━━━',
+        'Un Miguel anterior se cayó a medias. NO empieces de cero: continúa en la MISMA',
+        'rama (' + r + ') desde donde se quedó. Mira lo que ya está reconstruido, retoma',
+        'el hilo y sigue. No empezar de nuevo: reanudar el trabajo a medio hacer.',
+        '',
+      ]
+    : [
+        '━━━ ARRANQUE EN FRÍO ━━━',
+        'Empiezas la reconstrucción desde el principio en la rama ' + r + '.',
+        '',
+      ];
+  return [
+    'Eres el Miguel GIGANTE del ciclo de reconstrucción — el constructor, con esfuerzo',
+    'ULTRACODE (máxima profundidad, sin escatimar). Reconstruyes la feature ENTERA.',
+    '',
+    ...arranque,
+    '━━━ DE DÓNDE PARTES ━━━',
+    'Partes del CÓDIGO de master (masterRef = ' + master + '): ese es tu punto de',
+    'arranque limpio, partiendo desde el código que ya existía antes del ciclo.',
+    '',
+    '━━━ TU BRÚJULA ━━━',
+    'No copias la implementación vieja (no está): te guías por',
+    '  • los TESTS de la rama (la diana exacta),',
+    '  • el PLAN de Lina: ' + plan + ',',
+    '  • la DOCUMENTACIÓN de Anselmo: ' + docs + '.',
+    '',
+    '━━━ HASTA DÓNDE ━━━',
+    'Reprograma en la rama ' + r + ' hasta que TODOS los tests pasen (todos en verde).',
+    'No pares hasta el verde completo. Itera: construye, corre la batería, corrige.',
+  ].join('\n');
+}
+
 // ── Revisor de merge — resuelve conflictos y SIEMPRE completa el merge (NUEVO) ──
 // Cuando "Traer el código" choca, este revisor resuelve los marcadores de conflicto
 // en el árbol vivo, integrando la intención de Miguel con lo que ya había. Tiene

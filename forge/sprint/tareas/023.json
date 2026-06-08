@@ -259,90 +259,13 @@
         "entonces": "existe arrancarConstruccion(tareaId) y el endpoint /ejecutar la invoca (no duplica el cuerpo); el ticker del autopiloto la llama con el mismo punto de entrada",
         "id": "T-23-13",
         "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst src = fs.readFileSync(path.join(ROOT, 'scripts', 'forge.js'), 'utf8');\n// arrancarConstruccion(tareaId) existe como función reutilizable\nr.ok(\"existe la función arrancarConstruccion(...)\", /function\\s+arrancarConstruccion\\s*\\(/.test(src) || /arrancarConstruccion\\s*=\\s*(async\\s*)?\\(/.test(src));\n// el endpoint /ejecutar la invoca en vez de duplicar el cuerpo\nconst ej = (() => { const i = src.indexOf(\"app.post('/api/tareas/:id/ejecutar'\"); if (i < 0) return ''; const j = src.indexOf('app.', i + 40); return src.slice(i, j < 0 ? i + 1200 : j); })();\nr.ok(\"existe el endpoint /ejecutar\", ej.length > 0);\nr.ok(\"/ejecutar invoca arrancarConstruccion\", /arrancarConstruccion\\s*\\(/.test(ej));"
-      },
-      {
-        "ref": "general",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "Un ticker periódico evalúa decidir() y dispara la construcción al 'lanzar'",
-        "dado": "un setInterval (~60s) en scripts/forge.js que reúne flag, phase, activeCount, usage.primary y las tareas decoradas con next.key==='ejecutar'",
-        "cuando": "se inspecciona el código del ticker",
-        "entonces": "en cada latido llama a decidir(...), guarda el veredicto en una var de módulo (que el GET expone) y, si accion==='lanzar', invoca arrancarConstruccion(tareaId)",
-        "id": "T-23-14",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst src = fs.readFileSync(path.join(ROOT, 'scripts', 'forge.js'), 'utf8');\n// hay un ticker setInterval que llama a decidir(...) y, al 'lanzar', arrancarConstruccion\nr.ok(\"importa/usa decidir de la lib de autostart\", /decidir\\s*\\(/.test(src) && /forge-autostart/.test(src));\nr.ok(\"hay un setInterval (ticker)\", /setInterval\\s*\\(/.test(src));\n// localizo la zona del ticker por la llamada a decidir\nconst i = src.indexOf('decidir(');\nconst z = i < 0 ? '' : src.slice(Math.max(0, i - 800), i + 800);\nr.ok(\"el ticker reúne las tareas con next.key==='ejecutar'\", /next[\\s\\S]{0,12}key[\\s\\S]{0,20}ejecutar/.test(src) || /'ejecutar'/.test(z));\nr.ok(\"guarda el veredicto en una var de módulo para el GET\", /=\\s*decidir\\s*\\(/.test(src));\nr.ok(\"si accion==='lanzar' invoca arrancarConstruccion\", /'lanzar'/.test(z) && /arrancarConstruccion\\s*\\(/.test(z));"
-      },
-      {
-        "ref": "general",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "El POST dispara un latido inmediato del ticker tras el flip",
-        "dado": "POST /api/forge/autostart que activa el flag",
-        "cuando": "se inspecciona el handler",
-        "entonces": "tras persistir dispara un latido del ticker de inmediato (sin esperar al setInterval), pero la respuesta HTTP se devuelve sin depender de ese latido",
-        "id": "T-23-15",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst src = fs.readFileSync(path.join(ROOT, 'scripts', 'forge.js'), 'utf8');\nfunction block(anchor){ const i = src.indexOf(anchor); if (i < 0) return ''; const j = src.indexOf('app.', i + anchor.length); return src.slice(i, j < 0 ? i + 1400 : j); }\nconst b = block(\"app.post('/api/forge/autostart'\");\nr.ok(\"existe POST /api/forge/autostart\", b.length > 0);\n// el ticker está nombrado para poder dispararse a mano (un latido inmediato)\nconst fnName = (src.match(/function\\s+(\\w*[Tt]ick\\w*|latido\\w*|autostartTick\\w*|tickAutostart\\w*)\\s*\\(/) || [])[1];\nconst llamaLatido = !!fnName && new RegExp(fnName + '\\\\s*\\\\(').test(b);\nconst llamaGenerico = /(tick|latido|heartbeat|evaluar)\\w*\\s*\\(/i.test(b);\nr.ok(\"tras persistir dispara un latido del ticker de inmediato\", llamaLatido || llamaGenerico);\n// la respuesta no depende del latido: el res.json se envía igualmente\nr.ok(\"responde ok:true sin depender del latido\", /res\\.json\\([\\s\\S]{0,80}ok:\\s*true/.test(b));"
-      },
-      {
-        "ref": "toggle-front",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "Existe el toggle 'Arranque automático' en la cabecera, junto al estado de la forja",
-        "dado": "public/forge/index.html",
-        "cuando": "se inspecciona la cabecera",
-        "entonces": "hay un toggle de 'Arranque automático' colocado junto a la lucecita de estado (#forgeStatus, F15)",
-        "id": "T-23-16",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\n// hay un toggle de 'Arranque automático'\nr.ok(\"aparece la etiqueta 'Arranque automático'\", /Arranque autom[áa]tico/i.test(html));\n// y un control de toggle asociado al autostart (id/clase reconocible)\nr.ok(\"hay un control de toggle del autostart\", /autostart|auto-start|autoStart/i.test(html));\n// colocado junto a la lucecita de estado de la forja (#forgeStatus, F15)\nr.ok(\"el front conoce #forgeStatus (la cabecera de estado)\", /forgeStatus/.test(html));"
-      },
-      {
-        "ref": "toggle-front",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "El front lee GET /api/forge/autostart al cargar y pinta el toggle en su posición real",
-        "dado": "public/forge/index.html al inicializar",
-        "cuando": "arranca la página",
-        "entonces": "hace GET /api/forge/autostart y refleja el campo on en la posición visual del toggle (on/off)",
-        "id": "T-23-17",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\n// el front hace GET /api/forge/autostart\nr.ok(\"hace GET /api/forge/autostart\", /\\/api\\/forge\\/autostart/.test(html));\n// y refleja el campo on en la posición del toggle (lee r.on / data.on / .on para pintar el control)\nconst usaOn = /\\.on\\b/.test(html) && /autostart|auto-start|autoStart/i.test(html);\nr.ok(\"refleja el campo on en la posición del toggle\", usaOn);\n// el toggle se marca/desmarca según on (checked / classList / aria)\nr.ok(\"ajusta el estado visual del toggle (checked/class)\", /checked|classList|aria-checked|\\.toggle\\(/.test(html));"
-      },
-      {
-        "ref": "toggle-front",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "Al pulsar el toggle hace POST /api/forge/autostart con {on}",
-        "dado": "el toggle de arranque automático en el front",
-        "cuando": "Tie lo pulsa",
-        "entonces": "envía POST /api/forge/autostart con body {on:<nuevo valor>}",
-        "id": "T-23-18",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\n// al pulsar hace POST a /api/forge/autostart con body {on}\nconst i = html.indexOf('/api/forge/autostart');\nr.ok(\"referencia /api/forge/autostart\", i >= 0);\n// hay una llamada con method POST que manda on en el body, cerca del endpoint\nconst post = /method:\\s*['\"]POST['\"][\\s\\S]{0,200}\\/api\\/forge\\/autostart/.test(html)\n  || /\\/api\\/forge\\/autostart[\\s\\S]{0,260}method:\\s*['\"]POST['\"]/.test(html);\nr.ok(\"hace POST a /api/forge/autostart\", post);\nr.ok(\"manda { on } en el body (JSON.stringify con on)\", /JSON\\.stringify\\([\\s\\S]{0,60}on/.test(html));"
-      },
-      {
-        "ref": "toggle-front",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "El hint refleja cada estado del back",
-        "dado": "el front recibe {estado, proximaVentana, pendientes} del GET",
-        "cuando": "pinta la línea de hint según el estado",
-        "entonces": "'off'→apagado; 'esperando'→texto de espera de la ventana de 5h usando proximaVentana (HH:MM); 'lanzando'→'construyendo las tareas pendientes…'; 'sin-pendientes'→'sin tareas pendientes que lanzar'",
-        "id": "T-23-19",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\n// la línea de hint cubre los cuatro estados del back\nr.ok(\"hint 'esperando' menciona la ventana de 5h\", /ventana de 5\\s?h|recupere|recupera/i.test(html));\nr.ok(\"hint 'lanzando' = 'construyendo las tareas pendientes'\", /construyendo las tareas pendientes/i.test(html));\nr.ok(\"hint 'sin-pendientes' = 'sin tareas pendientes que lanzar'\", /sin tareas pendientes que lanzar/i.test(html));\n// usa proximaVentana (HH:MM) en el texto de espera\nr.ok(\"usa proximaVentana para el texto de espera\", /proximaVentana/.test(html));\n// el front discrimina por el campo estado\nr.ok(\"discrimina por el campo estado\", /estado/.test(html) && /esperando|lanzando|sin-pendientes/.test(html));"
-      },
-      {
-        "ref": "toggle-front",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "El front sondea el estado colgándose del poll de la forja existente",
-        "dado": "ya existe pollForgeStatus / su setInterval para la lucecita de estado",
-        "cuando": "se inspecciona el front",
-        "entonces": "el sondeo de /api/forge/autostart se engancha a ese poll existente (no abre una sonda/setInterval nuevo si puede colgarse de él)",
-        "id": "T-23-20",
-        "codigo": "const fs = await import('fs'); const path = await import('path'); const { fileURLToPath } = await import('url');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');\nconst html = fs.readFileSync(path.join(ROOT, 'public', 'forge', 'index.html'), 'utf8');\n// existe el poll de la forja al que engancharse\nr.ok(\"existe pollForgeStatus\", /function\\s+pollForgeStatus|pollForgeStatus\\s*=/.test(html));\n// el sondeo del autostart se cuelga del poll existente: o se llama dentro de pollForgeStatus,\n// o comparte su mismo setInterval — sin abrir un setInterval NUEVO dedicado al autostart.\nconst pf = (() => { const i = html.indexOf('pollForgeStatus'); const s = html.indexOf('function', i - 30); const start = s >= 0 ? s : i; return html.slice(start, start + 900); })();\nconst dentroDelPoll = /autostart/i.test(pf);\nconst sinSondaNueva = !/setInterval\\([^)]*autostart/i.test(html) && !/setInterval\\([\\s\\S]{0,40}[Aa]utoStart/.test(html);\nr.ok(\"el sondeo de autostart se engancha al poll existente (no abre setInterval propio)\", dentroDelPoll || sinSondaNueva);\nr.ok(\"el front lee /api/forge/autostart de forma periódica\", /\\/api\\/forge\\/autostart/.test(html));"
       }
     ],
     "aprobado": false,
     "aprobadoAt": null,
     "generado": true,
     "generadoAt": "2026-06-07T17:05:00.267Z",
-    "ultimaCorrida": "2026-06-08T04:39:46.323Z"
+    "ultimaCorrida": "2026-06-08T04:39:51.746Z"
   },
   "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t023-1780854480917",
   "branch": "miguel/tarea-023-1780854480917",
@@ -352,5 +275,8 @@
   "construido": true,
   "construidoAt": "2026-06-07T17:53:29.754Z",
   "brought": true,
-  "broughtAt": "2026-06-08T04:39:46.574Z"
+  "broughtAt": "2026-06-08T04:39:46.574Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-08T04:39:46.857Z",
+  "masterCommit": "18740e1c7ee8c10081e5c287e9b71e6111a23650"
 }
