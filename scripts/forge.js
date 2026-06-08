@@ -2385,9 +2385,9 @@ app.post('/api/tareas/:id/traer', async (req, res) => {
 // no tenga nada por comitear. Luego auto-crea la conversación `backlog` y lanza
 // a Iris a abrirla con un mensaje voluntario (la única vez que se invoca
 // "Discutir backlog").
-function projectPending() {
-  // Lista los cambios sin comitear del producto; [] = limpio. null = no es repo git.
-  const r = spawnSync('git', ['-C', PROJECT_ROOT, 'status', '--porcelain'], { encoding: 'utf8' });
+function repoPending(repoRoot) {
+  // Lista los cambios sin comitear de un repo; [] = limpio. null = no es repo git.
+  const r = spawnSync('git', ['-C', repoRoot, 'status', '--porcelain'], { encoding: 'utf8' });
   if (r.error || r.status !== 0) return null;
   return r.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
 }
@@ -2403,13 +2403,20 @@ function wipeChats() {
 }
 
 app.post('/api/cycle/new', (req, res) => {
-  const pending = projectPending();
+  // Quien debe estar limpio es el repo del OBJETIVO del nuevo ciclo: si vamos a
+  // trabajar el forge, es el forge (la raíz); si el producto, project/. El objetivo
+  // puede venir en el body (se fija atómico aquí); si no, cuenta el actual.
+  const target = req.body && req.body.target;
+  const tgt = target || cycleTarget();
+  const tgtRoot = tgt === 'project' ? PROJECT_ROOT : FORGE_DIR;
+  const tgtName = tgt === 'project' ? 'el producto (project/)' : 'el forge';
+  const pending = repoPending(tgtRoot);
   if (pending === null) {
-    return res.status(409).json({ error: 'No pude consultar el git del producto en ' + PROJECT_ROOT });
+    return res.status(409).json({ error: 'No pude consultar el git de ' + tgtName + ' en ' + tgtRoot });
   }
   if (pending.length) {
     return res.status(409).json({
-      error: 'El producto (project/) tiene cambios sin comitear. Ciérralos antes de empezar un ciclo nuevo.',
+      error: tgtName + ' tiene cambios sin comitear. Ciérralos antes de empezar un ciclo nuevo.',
       pending,
     });
   }
@@ -2419,7 +2426,6 @@ app.post('/api/cycle/new', (req, res) => {
   // body opcional `target` viaja aquí para que el cambio sea atómico con el reinicio.
   // (Mid-ciclo el endpoint /api/cycle/target está bloqueado a Spike — ver allí.)
   const reset = cycle.normalize({ ...loadCycle(), cursor: 0, paused: false });
-  const target = req.body && req.body.target;
   writeCycle(ROOT, target ? cycle.setTarget(reset, target) : reset);
 
   wipeChats();
@@ -2432,21 +2438,17 @@ app.post('/api/cycle/new', (req, res) => {
   res.status(201).json({ chat, spawned: true });
 });
 
-// Bootstrap: si no hay NINGUNA conversación, crea la primera y lanza a Iris a
-// abrirla explicando lo que hay pendiente (mismo opener del backlog, pero SIN
-// borrar nada ni exigir el producto limpio). Si ya hay alguna, no crea otra.
+// Bootstrap: si no hay NINGUNA conversación, deja la pizarra lista con una
+// conversación vacía — SIN lanzar a Iris. El abridor del backlog (Iris arranca
+// el hilo sola) es EXCLUSIVO de "Nuevo ciclo" (POST /api/cycle/new). Si ya hay
+// alguna conversación, no crea otra.
 app.post('/api/chats/bootstrap', (_req, res) => {
   const existing = listChats(ROOT);
   if (existing.length) {
     return res.json({ chat: existing[existing.length - 1], spawned: false });
   }
-  const chat = createChat(ROOT, { type: 'backlog', title: 'backlog' });
-  launchHeadless({
-    chatId: chat.id,
-    prompt: backlogOpenerPrompt(),
-    extraEnv: { FORGE_MSG_TYPE: 'backlog', FORGE_INTENT: 'opener' },
-  });
-  res.status(201).json({ chat, spawned: true });
+  const chat = createChat(ROOT, { type: 'charla' });
+  res.status(201).json({ chat, spawned: false });
 });
 
 // Renombrar una conversación a mano (clic en el título). body {title}.

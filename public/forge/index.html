@@ -144,12 +144,14 @@
      Normalizada al MISMO look que las fases de la miga (.bc-phase): texto apagado,
      borde transparente, mismo tamaño/radio. Solo el engranaje la distingue. */
   .gate { position: relative; }
+  /* NO ES UN BOTÓN: es una etiqueta de estado, la primera parada del carril. Se
+     navega SOLO con la flecha ◀ (igual que las fases). Sin cursor de mano, sin hover. */
   .gate-stop {
-    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap;
     background: transparent; color: var(--muted);
     border: 1px solid transparent; border-radius: 7px; padding: 3px 10px;
+    user-select: none;
   }
-  .gate-stop:hover { color: var(--text); border-color: var(--border); }
   .gate-pop {
     display: none; position: absolute; top: calc(100% + 8px); z-index: 40;
     width: 260px; padding: 14px; background: var(--panel-2);
@@ -773,10 +775,11 @@
         <!-- únicos botones del carril: Retroceder / Avanzar (SOFT, no destruyen).
              ◀ abre el carril; el orden del viaje es: ◀ ⚙ Nuevo ciclo › Spike › … › Cierre ▶ -->
         <button class="tp-btn" id="btnBack" title="Retroceder a la fase anterior (corregir el rumbo)">◀</button>
-        <!-- "Nuevo ciclo" ya NO es un popover: es un ESTADO. Esta parada lo ACTIVA y
-             su contenido (objetivo + rama + empezar) se ve en el centro (#nuevoCicloView). -->
+        <!-- "Nuevo ciclo" NO ES UN BOTÓN: es la PRIMERA parada del carril, una etiqueta
+             de estado. Se llega SOLO con la flecha ◀ desde Spike; su panel (objetivo +
+             rama + empezar) cubre el centro (#nuevoCicloView). -->
         <div class="gate" id="gateNew">
-          <button class="gate-stop" id="gateNewBtn" title="Entrar en el estado 'Nuevo ciclo' (objetivo + rama + empezar)">⚙ Nuevo ciclo</button>
+          <span class="gate-stop" id="gateNewBtn" title="La primera parada del carril. Navega hasta aquí con la flecha ◀ desde Spike.">⚙ Nuevo ciclo</span>
         </div>
         <span class="rail-sep">›</span>
         <div class="breadcrumb" id="breadcrumb"></div>
@@ -1052,6 +1055,17 @@
     alert('El objetivo (forge/producto) se fija al abrir un Nuevo ciclo.\nNo se puede cambiar a mitad de un ciclo.');
   }
 
+  // "Nuevo ciclo" es la PRIMERA parada del carril (◀ Nuevo ciclo › Spike › … ▶), no
+  // una fase del ciclo. nuevoActive = estás parado en ella (panel abierto). Es una
+  // parada de SOLO-vista: entras/sales con las flechas (suave), y el arranque real
+  // (destructivo) es el botón rojo de dentro. Ver showNuevoCiclo + las flechas.
+  let nuevoActive = false;
+  function cycleIdx() {
+    if (!cycle) return -1;
+    const phases = (cycle.phases && cycle.phases.length) ? cycle.phases : FALLBACK_PHASES;
+    return (cycle.cursor != null) ? cycle.cursor : phases.findIndex((p) => p.key === cycle.phase);
+  }
+
   function renderCycle() {
     const phases = (cycle && cycle.phases && cycle.phases.length) ? cycle.phases : FALLBACK_PHASES;
     let curIdx = -1;
@@ -1067,7 +1081,8 @@
         bcEl.appendChild(sep);
       }
       const span = document.createElement('span');
-      span.className = 'bc-phase' + (i === curIdx ? ' active' : '');
+      // si estás parado en "Nuevo ciclo", ninguna fase está activa (te saliste del carril).
+      span.className = 'bc-phase' + (i === curIdx && !nuevoActive ? ' active' : '');
       span.textContent = p.label;
       bcEl.appendChild(span);
     });
@@ -1093,9 +1108,14 @@
     targetChip.disabled = true;
     targetChip.title = 'El objetivo (forge/producto) se fija al abrir un Nuevo ciclo. No se cambia a mitad de ciclo.';
 
+    // "Nuevo ciclo" como parada: resáltala cuando estás en ella (etiqueta de estado).
+    gateNewBtn.classList.toggle('active', nuevoActive);
+
     const paused = !!(cycle && cycle.paused);
-    btnAdvance.disabled = !avail || curIdx < 0 || curIdx >= phases.length - 1;
-    btnBack.disabled = !avail || curIdx <= 0;
+    // ▶ en "Nuevo ciclo" VUELVE a la fase (Spike); si no, avanza salvo en la última.
+    btnAdvance.disabled = !avail || (!nuevoActive && (curIdx < 0 || curIdx >= phases.length - 1));
+    // ◀ en Spike (cursor 0) ENTRA en "Nuevo ciclo"; estando ya en ella, no hay más atrás.
+    btnBack.disabled = !avail || nuevoActive;
     btnPause.disabled = !avail;
     btnPause.textContent = paused ? '▶ Reanudar' : '⏸ Pausar';
     btnPause.title = paused ? 'Reanudar el trabajo de la fase actual' : 'Pausar el trabajo de la fase actual';
@@ -1129,11 +1149,17 @@
     return { ok: true };
   }
   btnAdvance.onclick = async () => {
+    // si estás parado en "Nuevo ciclo", ▶ solo te devuelve a la fase (Spike): suave,
+    // NO arranca el ciclo (eso es el botón rojo de dentro).
+    if (nuevoActive) { showNuevoCiclo(false); return; }
     const gate = canChangePhase('advance');
     if (!gate.ok) { alert(gate.reason); return; }
     await cycleDo('advance');
   };
   btnBack.onclick = async () => {
+    // desde Spike (la primera fase), ◀ no retrocede de fase: ENTRA en "Nuevo ciclo"
+    // (la parada anterior a Spike). Suave: solo abre el panel, no borra nada.
+    if (!nuevoActive && cycleIdx() <= 0) { syncNewGate(); showNuevoCiclo(true); return; }
     const gate = canChangePhase('back');
     if (!gate.ok) { alert(gate.reason); return; }
     await cycleDo('back');
@@ -3225,9 +3251,11 @@
   const gateNewBtn = document.getElementById('gateNewBtn');
   function showNuevoCiclo(on) {
     ncView.style.display = on ? 'flex' : 'none';
-    gateNewBtn.classList.toggle('active', on);
+    nuevoActive = on;            // estás parado en la parada "Nuevo ciclo"
+    renderCycle();               // refresca el resaltado del carril + las flechas
   }
-  gateNewBtn.onclick = (e) => { e.stopPropagation(); syncNewGate(); showNuevoCiclo(true); };
+  // "Nuevo ciclo" NO es clicable: se llega SOLO con la flecha ◀ desde Spike (ver
+  // btnBack.onclick, que llama a syncNewGate + showNuevoCiclo). Aquí no hay onclick.
   document.getElementById('newCancel').onclick = () => showNuevoCiclo(false);
 
   // Ajustes del estado "Nuevo ciclo": objetivo (forge/producto) + nombre de rama.
