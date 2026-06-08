@@ -158,13 +158,16 @@ export function nextNum(root) {
   return max + 1;
 }
 
-export function createChat(root, { type, title } = {}) {
+export function createChat(root, { type, title, target } = {}) {
   const num = nextNum(root);
   const id = pad(num);
   const chat = {
     id, num,
     type: type || 'tarea',
     title: (title && String(title).trim()) || `Conversación ${id}`,
+    // objetivo (forge|project) al que pertenece la conversación. Lo usan las
+    // conversaciones de backlog: una por objetivo (ver findBacklogChat en forge.js).
+    ...(target ? { target } : {}),
     createdAt: new Date().toISOString(),
     messages: [],
   };

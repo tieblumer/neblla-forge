@@ -125,6 +125,9 @@
   .target-chip:disabled { cursor: not-allowed; opacity: .55; filter: none; }
   .target-chip:disabled:hover { filter: none; }
   .target-branch { font-size: 11px; color: var(--muted); }
+  /* en "Nuevo ciclo" la rama es editable (clic). Fuera, solo texto. */
+  .target-branch.editable { cursor: pointer; }
+  .target-branch.editable:hover { color: var(--text); text-decoration: underline dotted; }
 
   /* CENTRO — el carril del viaje */
   .rail { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; min-width: 0; }
@@ -152,51 +155,8 @@
     border: 1px solid transparent; border-radius: 7px; padding: 3px 10px;
     user-select: none;
   }
-  .gate-pop {
-    display: none; position: absolute; top: calc(100% + 8px); z-index: 40;
-    width: 260px; padding: 14px; background: var(--panel-2);
-    border: 1px solid var(--gate); border-radius: 10px; box-shadow: 0 10px 34px rgba(0,0,0,.5);
-  }
-  .gate-pop.open { display: block; }
-  #gateNew .gate-pop { left: 0; }
-  .gate-pop h4 { margin: 0 0 4px; font-size: 13px; }
-  .gate-pop p { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
-  .gate-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .gate-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  .gate-seg button {
-    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
-    background: transparent; color: var(--muted); border: 0; border-right: 1px solid var(--border); padding: 4px 11px;
-  }
-  .gate-seg button:last-child { border-right: 0; }
-  .gate-seg button.active { background: var(--secondary); color: #fff; }
-  .gate-pop input.gate-branch {
-    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
-    border-radius: 7px; padding: 6px 9px; font: inherit; outline: none; margin-bottom: 10px;
-  }
-  .gate-pop input.gate-branch:focus { border-color: var(--secondary); }
-  .gate-danger {
-    width: 100%; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
-    background: #b3162a; color: #fff; border: 0; border-radius: 8px; padding: 8px 10px;
-  }
-  .gate-danger:hover { filter: brightness(1.1); }
-  /* ESTADO "Nuevo ciclo": panel que cubre el centro (en vez del viejo popover) */
   .col-center { position: relative; }
-  .nc-view { position: absolute; inset: 0; z-index: 30; background: var(--bg);
-    display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .nc-card { width: min(540px, 94%); background: var(--panel); border: 1px solid var(--gate);
-    border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.5); padding: 24px 28px; }
-  .nc-card h2 { margin: 0 0 6px; font-size: 20px; }
-  .nc-card p { margin: 0 0 18px; font-size: 13px; color: var(--muted); line-height: 1.5; }
-  .nc-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .nc-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--secondary); width: 64px; }
-  .nc-card input.gate-branch { flex: 1 1 auto; background: var(--bg); color: var(--text);
-    border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; font: inherit; outline: none; }
-  .nc-card input.gate-branch:focus { border-color: var(--secondary); }
-  .nc-actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
-  .nc-actions .gate-danger { width: auto; }
-  .nc-cancel { font: inherit; font-size: 12px; cursor: pointer; background: transparent;
-    color: var(--secondary); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; }
-  .nc-cancel:hover { border-color: var(--secondary); }
+  /* "Nuevo ciclo" parado = etiqueta de estado resaltada (igual que una fase activa). */
   .gate-stop.active { color: #fff; border-color: var(--gate); background: var(--gate); }
 
   /* pie del carril: el combo de modelos, abajo-derecha pero DENTRO del carril */
@@ -772,12 +732,13 @@
     <!-- CENTRO: el carril del viaje (Nuevo ciclo › fases … Cierre) -->
     <div class="bar-center">
       <div class="rail" id="rail">
-        <!-- únicos botones del carril: Retroceder / Avanzar (SOFT, no destruyen).
-             ◀ abre el carril; el orden del viaje es: ◀ ⚙ Nuevo ciclo › Spike › … › Cierre ▶ -->
+        <!-- carril: ◀ Retroceder / Avanzar ▶. El orden del viaje es:
+             ◀ ⚙ Nuevo ciclo › Spike › … › Cierre ▶. En "Nuevo ciclo", ▶ = EMPEZAR
+             (borra el taller y arranca); en el resto, ◀/▶ son SOFT (no destruyen). -->
         <button class="tp-btn" id="btnBack" title="Retroceder a la fase anterior (corregir el rumbo)">◀</button>
         <!-- "Nuevo ciclo" NO ES UN BOTÓN: es la PRIMERA parada del carril, una etiqueta
-             de estado. Se llega SOLO con la flecha ◀ desde Spike; su panel (objetivo +
-             rama + empezar) cubre el centro (#nuevoCicloView). -->
+             de estado. Se llega SOLO con la flecha ◀ desde Spike. Sin modal: el objetivo
+             y la rama se editan arriba a la izquierda; el centro lo ocupa la charla de Iris. -->
         <div class="gate" id="gateNew">
           <span class="gate-stop" id="gateNewBtn" title="La primera parada del carril. Navega hasta aquí con la flecha ◀ desde Spike.">⚙ Nuevo ciclo</span>
         </div>
@@ -816,28 +777,8 @@
 
   <!-- CENTRO: hilo + compositor -->
   <main class="col col-center">
-    <!-- ESTADO "Nuevo ciclo": panel que cubre el centro mientras estás en él -->
-    <div class="nc-view" id="nuevoCicloView" style="display:none">
-      <div class="nc-card">
-        <h2>⚙ Nuevo ciclo</h2>
-        <p>Arranca un ciclo limpio. Define sobre qué trabajar y con qué rama; al empezar se borra el taller (las conversaciones) y se abre el backlog.</p>
-        <div class="nc-row">
-          <span class="nc-lbl">Objetivo</span>
-          <div class="gate-seg" id="newTargetSeg">
-            <button data-target="forge">forge</button>
-            <button data-target="project">producto</button>
-          </div>
-        </div>
-        <div class="nc-row">
-          <span class="nc-lbl">Rama</span>
-          <input class="gate-branch" id="newBranch" placeholder="nombre de rama (ej. ciclo/qa-barra)" />
-        </div>
-        <div class="nc-actions">
-          <button class="gate-danger" id="newStart" title="Borra el taller (conversaciones) y exige el producto limpio">⚠ Empezar ciclo — borra el taller</button>
-          <button class="nc-cancel" id="newCancel">Cancelar</button>
-        </div>
-      </div>
-    </div>
+    <!-- "Nuevo ciclo" ya NO tiene modal: el objetivo y la rama se editan arriba a la
+         izquierda, la conversación de Iris ocupa el centro como una más, y ▶ = empezar. -->
     <div class="col-head" id="centerHead">
       <span class="head-title-wrap">
         <span id="chatTitle" class="chat-title" title="Clic para editar el nombre">Chat</span>
@@ -1046,13 +987,26 @@
     renderCycle();
   }
 
-  // El objetivo (forge/producto) NUNCA se cambia desde el chip: el chip está siempre
-  // deshabilitado y el único sitio para fijar forge/producto es el selector dentro de
-  // la puerta "Nuevo ciclo" (que lo manda atómico en POST /api/cycle/new). Esta función
-  // queda como guardia por si algo intentara dispararla pese al chip deshabilitado.
-  function toggleTarget() {
+  // El objetivo (forge/producto) SOLO se cambia desde el chip cuando estás en la parada
+  // "Nuevo ciclo" (chip editable). Al cambiarlo, Iris abre la conversación del backlog
+  // de ese objetivo (POST /api/cycle/target + abrirBacklog). Fuera de ahí, avisa.
+  async function toggleTarget() {
     if (!cycle) return;
-    alert('El objetivo (forge/producto) se fija al abrir un Nuevo ciclo.\nNo se puede cambiar a mitad de un ciclo.');
+    if (!nuevoActive) {
+      alert('El objetivo (forge/producto) solo se cambia en "Nuevo ciclo" (la flecha ◀ desde Spike).');
+      return;
+    }
+    const next = (cycle.target === 'project') ? 'forge' : 'project';
+    try {
+      const res = await fetch('/api/cycle/target', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: next }),
+      });
+      if (!res.ok) { alert('No se pudo cambiar el objetivo.'); return; }
+      cycle = await res.json();
+      renderCycle();
+      abrirBacklog(cycle.target);   // Iris abre (o reabre) la del nuevo objetivo
+    } catch { alert('No se pudo cambiar el objetivo.'); }
   }
 
   // "Nuevo ciclo" es la PRIMERA parada del carril (◀ Nuevo ciclo › Spike › … ▶), no
@@ -1100,13 +1054,14 @@
     cycleBarEl.classList.toggle('offline', !cycle);
 
     const avail = !!cycle;
-    // BLOQUEO del objetivo: el chip está SIEMPRE deshabilitado, en todas las fases
-    // (incluido Spike). "Nuevo ciclo" no es una fase del ciclo, es la puerta de
-    // entrada: el ÚNICO sitio donde se fija forge/producto es el selector dentro de
-    // esa puerta, que manda el objetivo atómico en POST /api/cycle/new. Una vez
-    // dentro de un ciclo (Spike incluido) el objetivo ya no se toca.
-    targetChip.disabled = true;
-    targetChip.title = 'El objetivo (forge/producto) se fija al abrir un Nuevo ciclo. No se cambia a mitad de ciclo.';
+    // El objetivo (forge/producto) y la rama SOLO se editan en la parada "Nuevo ciclo".
+    // Fuera de ella el chip está bloqueado: no se cambia de objetivo a mitad de ciclo.
+    targetChip.disabled = !(avail && nuevoActive);
+    targetChip.title = nuevoActive
+      ? 'Clic para cambiar el objetivo (forge ⇄ producto). Iris abrirá la conversación del backlog de ese objetivo.'
+      : 'El objetivo (forge/producto) solo se cambia en "Nuevo ciclo" (la flecha ◀ desde Spike).';
+    targetBranch.title = nuevoActive ? 'Clic para editar la rama del ciclo.' : '';
+    targetBranch.classList.toggle('editable', !!nuevoActive);
 
     // "Nuevo ciclo" como parada: resáltala cuando estás en ella (etiqueta de estado).
     gateNewBtn.classList.toggle('active', nuevoActive);
@@ -1149,23 +1104,31 @@
     return { ok: true };
   }
   btnAdvance.onclick = async () => {
-    // si estás parado en "Nuevo ciclo", ▶ solo te devuelve a la fase (Spike): suave,
-    // NO arranca el ciclo (eso es el botón rojo de dentro).
-    if (nuevoActive) { showNuevoCiclo(false); return; }
+    // ▶ desde "Nuevo ciclo" = EMPEZAR: borra el taller y arranca en Spike.
+    if (nuevoActive) { await empezarCiclo(); return; }
     const gate = canChangePhase('advance');
     if (!gate.ok) { alert(gate.reason); return; }
     await cycleDo('advance');
   };
   btnBack.onclick = async () => {
     // desde Spike (la primera fase), ◀ no retrocede de fase: ENTRA en "Nuevo ciclo"
-    // (la parada anterior a Spike). Suave: solo abre el panel, no borra nada.
-    if (!nuevoActive && cycleIdx() <= 0) { syncNewGate(); showNuevoCiclo(true); return; }
+    // (la parada anterior a Spike). Suave: abre la conversación de Iris, no borra nada.
+    if (!nuevoActive && cycleIdx() <= 0) { showNuevoCiclo(true); return; }
     const gate = canChangePhase('back');
     if (!gate.ok) { alert(gate.reason); return; }
     await cycleDo('back');
   };
   btnPause.onclick = () => cycleDo(cycle && cycle.paused ? 'resume' : 'pause');
   targetChip.onclick = toggleTarget;
+  // La rama del ciclo: editable SOLO en "Nuevo ciclo" (clic en el texto ⌥ <rama>).
+  targetBranch.onclick = () => {
+    if (!nuevoActive) return;
+    const cur = getBranch() === 'sin rama' ? '' : getBranch();
+    const v = prompt('Nombre de la rama del ciclo:', cur);
+    if (v == null) return;
+    setBranch(v.trim());
+    renderCycle();
+  };
 
   // ── 👥 Equipo: la pestaña de perfiles ────────────────────────────────────────
   // Lee /api/people y pinta una tarjeta por empleado: su descripción (las
@@ -1393,7 +1356,10 @@
 
   // ── listas ───────────────────────────────────────────────────────────────────
   async function loadList() {
-    const chats = await (await fetch('/api/chats')).json();
+    const all = await (await fetch('/api/chats')).json();
+    // En "Nuevo ciclo" la única conversación es la de Iris: la lista muestra SOLO los
+    // backlog. Fuera de esa parada, todas.
+    const chats = nuevoActive ? all.filter((c) => c.type === 'backlog') : all;
     listEl.innerHTML = '';
     if (!chats.length) {
       listEl.innerHTML = '<li class="empty">Todavía no hay conversaciones.<br>Crea la primera.</li>';
@@ -1486,6 +1452,12 @@
   }
 
   async function loadTareas() {
+    // En "Nuevo ciclo" las tareas están vacías (se borran al empezar): no las pintamos.
+    if (nuevoActive) {
+      tareasPorChat = {};
+      tareaListEl.innerHTML = '<li class="empty">Las tareas están vacías en Nuevo ciclo.</li>';
+      return;
+    }
     let data;
     try { data = await (await fetch('/api/tareas')).json(); } catch { return; }
     // el motor ya devuelve {tareas: [decoradas+ordenadas], grupos: [...]}.
@@ -3244,50 +3216,41 @@
     btnWand.disabled = false;
   };
 
-  // ── "Nuevo ciclo" como ESTADO (ya no un popover) ────────────────────────────
-  // La parada del carril ENTRA en el estado: su panel (objetivo + rama + empezar)
-  // cubre el centro hasta que empiezas el ciclo o cancelas.
-  const ncView = document.getElementById('nuevoCicloView');
+  // ── "Nuevo ciclo": la PRIMERA parada del carril (no un panel/modal) ─────────
+  // Se llega SOLO con la flecha ◀ desde Spike. No hay modal en el centro: el objetivo
+  // y la rama se editan arriba a la izquierda; la única conversación es la de Iris
+  // (una por objetivo); la flecha ▶ = "empezar" (borra el taller y arranca en Spike).
   const gateNewBtn = document.getElementById('gateNewBtn');
+
+  // Abre (o crea + lanza a Iris en) la conversación de backlog del objetivo dado.
+  // Una por objetivo: si ya existe la reutiliza; si no, Iris la abre.
+  async function abrirBacklog(target) {
+    try {
+      const res = await fetch('/api/cycle/backlog', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target }),
+      });
+      if (!res.ok) return;
+      const j = await res.json();
+      await loadList();
+      openChat(j.chat.id);
+      if (j.spawned) { addPending('iris', null); lastSig = ''; refreshThread(); }
+    } catch {}
+  }
+
   function showNuevoCiclo(on) {
-    ncView.style.display = on ? 'flex' : 'none';
     nuevoActive = on;            // estás parado en la parada "Nuevo ciclo"
-    renderCycle();               // refresca el resaltado del carril + las flechas
-  }
-  // "Nuevo ciclo" NO es clicable: se llega SOLO con la flecha ◀ desde Spike (ver
-  // btnBack.onclick, que llama a syncNewGate + showNuevoCiclo). Aquí no hay onclick.
-  document.getElementById('newCancel').onclick = () => showNuevoCiclo(false);
-
-  // Ajustes del estado "Nuevo ciclo": objetivo (forge/producto) + nombre de rama.
-  const newTargetSeg = document.getElementById('newTargetSeg');
-  const newBranch = document.getElementById('newBranch');
-  let newTargetChoice = (cycle && cycle.target) || 'forge';
-  function syncNewGate() {
-    newTargetChoice = (cycle && cycle.target) || newTargetChoice || 'forge';
-    for (const b of newTargetSeg.querySelectorAll('button')) {
-      b.classList.toggle('active', b.dataset.target === newTargetChoice);
-    }
-    if (!newBranch.value) newBranch.value = (getBranch() === 'sin rama' ? '' : getBranch());
-  }
-  for (const b of newTargetSeg.querySelectorAll('button')) {
-    b.onclick = () => {
-      newTargetChoice = b.dataset.target;
-      for (const x of newTargetSeg.querySelectorAll('button')) x.classList.toggle('active', x === b);
-    };
+    renderCycle();               // carril + flechas + chip del objetivo editable
+    loadList();                  // la lista de la izquierda: solo backlog en Nuevo ciclo
+    loadTareas();                // las tareas: vacías en Nuevo ciclo
+    if (on) abrirBacklog((cycle && cycle.target) || 'forge');
   }
 
-  // El GUARDIÁN fuerte del borrado vive AQUÍ (ya no en Avanzar): el botón rojo de
-  // la puerta de entrada. Confirma, fija objetivo + rama, y barre el taller.
-  document.getElementById('newStart').onclick = async () => {
-    if (!confirm('Empezar un ciclo nuevo borra TODAS las conversaciones del taller y abre el backlog.\nSolo funciona si el producto (project/) está limpio.\n\n¿Seguir?')) return;
-    setBranch(newBranch.value.trim());
-    // El objetivo elegido en la puerta viaja DENTRO de /api/cycle/new: ahí el cambio
-    // es atómico con el reinicio a Spike (el endpoint suelto /api/cycle/target está
-    // bloqueado fuera de Spike). Así "Nuevo ciclo" es el único sitio que lo fija.
-    const res = await fetch('/api/cycle/new', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target: newTargetChoice }),
-    });
+  // ▶ desde "Nuevo ciclo" = EMPEZAR: confirma, exige el repo del objetivo limpio,
+  // borra el taller (salvo la conversación de Iris del objetivo) y arranca en Spike.
+  async function empezarCiclo() {
+    if (!confirm('Empezar el ciclo BORRA el taller (todas las tareas y conversaciones, salvo la de Iris del objetivo) y arranca en Spike.\n\n¿Seguir?')) return;
+    const res = await fetch('/api/cycle/empezar', { method: 'POST' });
     if (res.status === 409) {
       const j = await res.json();
       let msg = j.error || 'No se pudo.';
@@ -3297,13 +3260,12 @@
     }
     if (!res.ok) { alert('No se pudo empezar el ciclo.'); return; }
     const j = await res.json();
-    showNuevoCiclo(false);
-    loadCycle();           // el ciclo vuelve a Spike: refresca el carril
+    nuevoActive = false;
+    if (j.cycle) { cycle = j.cycle; renderCycle(); } else { loadCycle(); }
     await loadList();
-    openChat(j.chat.id);
-    addPending('iris', null);
-    lastSig = ''; refreshThread();
-  };
+    loadTareas();
+    if (j.chat) openChat(j.chat.id);
+  }
 
   document.getElementById('newChat').onclick = async () => {
     const res = await fetch('/api/chats', {

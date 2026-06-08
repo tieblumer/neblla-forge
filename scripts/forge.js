@@ -214,21 +214,31 @@ function buildThreadText(chatId) {
 
 // Mensaje voluntario de apertura del backlog (la única vez que se llama a
 // "Discutir backlog"): Iris mira el backlog real del producto y abre la charla.
-function backlogOpenerPrompt() {
+// Ruta del BACKLOG.md de un objetivo. Todo lo del forge vive en forge/; el producto
+// tiene el suyo en project/backbone/.
+function backlogPathFor(target) {
+  return target === 'project'
+    ? path.join(PROJECT_ROOT, 'backbone', 'BACKLOG.md')
+    : path.join(FORGE_DIR, 'forge', 'backbone', 'BACKLOG.md');
+}
+
+function backlogOpenerPrompt(target = cycleTarget()) {
+  const isProject = target === 'project';
+  const quien = isProject ? 'Neblla, el PRODUCTO (la carpeta project/)' : 'el FORGE, la propia máquina de construir';
   // Le incrustamos el backlog en el prompt (el server SÍ puede leer cualquier
   // ruta); así Iris no depende de leer ficheros fuera de su cwd. Puede usar
   // Read/Grep/Glob para profundizar, pero el backlog ya lo tiene delante.
-  let backlog = '(no encontré el BACKLOG.md del producto)';
+  let backlog = '(aún no hay backlog escrito para este objetivo)';
   try {
-    const p = path.join(PROJECT_ROOT, 'backbone', 'BACKLOG.md');
+    const p = backlogPathFor(target);
     if (fs.existsSync(p)) backlog = fs.readFileSync(p, 'utf8').slice(0, 12000);
   } catch { /* deja el placeholder */ }
   return [
     'Eres Iris, la CTO de Neblla, en una charla con Tie (el CEO) dentro del forge.',
-    'Empieza un CICLO nuevo: la pizarra está limpia y tú ABRES la conversación del',
-    'backlog (Tie aún no ha dicho nada). Este es tu mensaje voluntario de arranque.',
+    `Empieza un CICLO nuevo sobre ${quien}: la pizarra está limpia y tú ABRES la`,
+    'conversación del backlog (Tie aún no ha dicho nada). Es tu mensaje de arranque.',
     '',
-    'Este es el backlog real del producto:',
+    `Este es el backlog real de ${quien}:`,
     '--- BACKLOG ---',
     backlog,
     '--- FIN BACKLOG ---',
@@ -2380,11 +2390,11 @@ app.post('/api/tareas/:id/traer', async (req, res) => {
   return res.status(409).json({ applied: false, error: result.error || 'no se pudo subir a master' });
 });
 
-// ── nuevo ciclo ───────────────────────────────────────────────────────────────
-// Borra TODAS las conversaciones (efímeras) y exige que el producto (project/)
-// no tenga nada por comitear. Luego auto-crea la conversación `backlog` y lanza
-// a Iris a abrirla con un mensaje voluntario (la única vez que se invoca
-// "Discutir backlog").
+// ── nuevo ciclo: la parada de backlog + "empezar" ───────────────────────────
+// "Nuevo ciclo" es la primera parada del carril (se llega con ◀ desde Spike). Ahí
+// el objetivo (forge|project) y la rama se editan arriba a la izquierda, y la única
+// conversación es la de Iris (una por objetivo, POST /api/cycle/backlog). La flecha
+// ▶ = "empezar" (POST /api/cycle/empezar): borra el taller y arranca en Spike.
 function repoPending(repoRoot) {
   // Lista los cambios sin comitear de un repo; [] = limpio. null = no es repo git.
   const r = spawnSync('git', ['-C', repoRoot, 'status', '--porcelain'], { encoding: 'utf8' });
@@ -2402,12 +2412,65 @@ function wipeChats() {
   }
 }
 
-app.post('/api/cycle/new', (req, res) => {
-  // Quien debe estar limpio es el repo del OBJETIVO del nuevo ciclo: si vamos a
-  // trabajar el forge, es el forge (la raíz); si el producto, project/. El objetivo
-  // puede venir en el body (se fija atómico aquí); si no, cuenta el actual.
-  const target = req.body && req.body.target;
-  const tgt = target || cycleTarget();
+// La conversación de backlog de un objetivo (forge|project), o null. Una por objetivo.
+function findBacklogChat(target) {
+  for (const meta of listChats(ROOT)) {
+    const c = readChat(ROOT, meta.id);
+    if (c && c.type === 'backlog' && (c.target || 'forge') === target) return c;
+  }
+  return null;
+}
+
+// Crea la conversación de backlog de un objetivo y lanza a Iris a ABRIRLA (su único
+// momento de apertura voluntaria), enfocada al backlog de ESE objetivo.
+function createBacklogChat(target) {
+  const chat = createChat(ROOT, {
+    type: 'backlog',
+    title: 'backlog · ' + (target === 'project' ? 'producto' : 'forge'),
+    target,
+  });
+  launchHeadless({
+    chatId: chat.id,
+    prompt: backlogOpenerPrompt(target),
+    extraEnv: { FORGE_MSG_TYPE: 'backlog', FORGE_INTENT: 'opener' }, // sin replyTo → apertura
+  });
+  return chat;
+}
+
+// Borra TODO el taller (todas las conversaciones y todas las tareas), SALVO la
+// conversación cuyo id sea keepId (la de backlog del objetivo elegido). Limpia
+// también los dirs-lock huérfanos.
+function wipeWorkshop(keepId) {
+  let cfiles = [];
+  try { cfiles = fs.readdirSync(chatsDir(ROOT)); } catch {}
+  for (const f of cfiles) {
+    const m = f.match(/^(\d+)\.json$/);
+    if (m) {
+      if (m[1] === keepId) continue;
+      try { fs.unlinkSync(path.join(chatsDir(ROOT), f)); } catch {}
+    } else if (/^\.\d+\.lock$/.test(f)) {
+      try { fs.rmdirSync(path.join(chatsDir(ROOT), f)); } catch {}
+    }
+  }
+  for (const t of listTareas(ROOT)) { try { deleteTarea(ROOT, t.id); } catch {} }
+}
+
+// PARADA "Nuevo ciclo": la conversación de backlog del objetivo. Si ya existe, la
+// devuelve; si no, la crea y abre Iris. Una por objetivo: cambiar de objetivo abre
+// la del otro; volver a uno ya creado NO duplica (ya está ahí).
+app.post('/api/cycle/backlog', (req, res) => {
+  const target = (req.body && req.body.target) || cycleTarget();
+  const existing = findBacklogChat(target);
+  if (existing) return res.json({ chat: existing, spawned: false });
+  res.status(201).json({ chat: createBacklogChat(target), spawned: true });
+});
+
+// "Empezar" = la flecha ▶ desde "Nuevo ciclo". Exige el repo del OBJETIVO limpio,
+// borra el taller (todas las tareas y conversaciones SALVO la de backlog del objetivo
+// elegido) y arranca: cursor en Spike (0), sin pausa. El objetivo ya se fijó en la
+// parada (chip de arriba-izquierda → POST /api/cycle/target).
+app.post('/api/cycle/empezar', (_req, res) => {
+  const tgt = cycleTarget();
   const tgtRoot = tgt === 'project' ? PROJECT_ROOT : FORGE_DIR;
   const tgtName = tgt === 'project' ? 'el producto (project/)' : 'el forge';
   const pending = repoPending(tgtRoot);
@@ -2416,32 +2479,23 @@ app.post('/api/cycle/new', (req, res) => {
   }
   if (pending.length) {
     return res.status(409).json({
-      error: tgtName + ' tiene cambios sin comitear. Ciérralos antes de empezar un ciclo nuevo.',
+      error: tgtName + ' tiene cambios sin comitear. Ciérralos antes de empezar el ciclo.',
       pending,
     });
   }
-
-  // Empezar un ciclo nuevo REBOBINA el carril a Spike (cursor 0, sin pausa). Es el
-  // único momento en que el objetivo (forge/producto) puede fijarse libremente: el
-  // body opcional `target` viaja aquí para que el cambio sea atómico con el reinicio.
-  // (Mid-ciclo el endpoint /api/cycle/target está bloqueado a Spike — ver allí.)
-  const reset = cycle.normalize({ ...loadCycle(), cursor: 0, paused: false });
-  writeCycle(ROOT, target ? cycle.setTarget(reset, target) : reset);
-
-  wipeChats();
-  const chat = createChat(ROOT, { type: 'backlog', title: 'backlog' });
-  launchHeadless({
-    chatId: chat.id,
-    prompt: backlogOpenerPrompt(),
-    extraEnv: { FORGE_MSG_TYPE: 'backlog', FORGE_INTENT: 'opener' }, // sin replyTo → apertura
-  });
-  res.status(201).json({ chat, spawned: true });
+  // conserva la conversación de backlog del objetivo (créala+abre Iris si no hay).
+  let keep = findBacklogChat(tgt);
+  let spawned = false;
+  if (!keep) { keep = createBacklogChat(tgt); spawned = true; }
+  wipeWorkshop(keep.id);
+  writeCycle(ROOT, cycle.normalize({ ...loadCycle(), cursor: 0, paused: false }));
+  res.status(200).json({ chat: keep, spawned, cycle: cycle.publicState(loadCycle()) });
 });
 
 // Bootstrap: si no hay NINGUNA conversación, deja la pizarra lista con una
 // conversación vacía — SIN lanzar a Iris. El abridor del backlog (Iris arranca
-// el hilo sola) es EXCLUSIVO de "Nuevo ciclo" (POST /api/cycle/new). Si ya hay
-// alguna conversación, no crea otra.
+// el hilo sola) es EXCLUSIVO de la parada "Nuevo ciclo" (POST /api/cycle/backlog).
+// Si ya hay alguna conversación, no crea otra.
 app.post('/api/chats/bootstrap', (_req, res) => {
   const existing = listChats(ROOT);
   if (existing.length) {
@@ -2487,9 +2541,8 @@ app.get('/api/cycle', (_req, res) => {
   res.json(cycle.publicState(loadCycle()));
 });
 
-// Avanzar es SOFT: pura navegación, NUNCA destruye. El borrado del taller (las
-// conversaciones efímeras del Spike) ya NO cuelga de aquí — vive con su guardián
-// fuerte en "Nuevo ciclo" (POST /api/cycle/new). Así Avanzar mueve sin sustos.
+// Avanzar es SOFT: pura navegación entre fases, NUNCA destruye. El borrado del taller
+// vive en "empezar" (▶ desde la parada "Nuevo ciclo", POST /api/cycle/empezar), no aquí.
 app.post('/api/cycle/advance', (_req, res) => {
   const next = cycle.advance(loadCycle());
   res.json(cycle.publicState(writeCycle(ROOT, next)));
@@ -2509,10 +2562,10 @@ app.post('/api/cycle/resume', (_req, res) => {
 // NUNCA los dos a la vez. Lo sabrán todos los personajes (Miguel/Stevens/Miyagi).
 // Se fija antes de arrancar el sprint. Por defecto 'forge'.
 app.post('/api/cycle/target', (req, res) => {
-  // BLOQUEO: el objetivo solo se cambia "en caliente" cuando estamos en un ciclo
-  // nuevo (fase Spike, cursor 0). En cualquier otra fase el selector está cerrado
-  // para no cambiar de forge/producto a mitad de un ciclo en curso. Para cambiarlo
-  // hay que empezar un Nuevo ciclo (POST /api/cycle/new, que sí acepta `target`).
+  // BLOQUEO: el objetivo solo se cambia en la fase Spike (cursor 0), que es donde vive
+  // la parada "Nuevo ciclo". En cualquier otra fase el chip está cerrado para no cambiar
+  // de forge/producto a mitad de un ciclo en curso. (El frontend lo edita desde el chip
+  // de arriba-izquierda solo cuando estás parado en "Nuevo ciclo".)
   const cur = loadCycle();
   if (cycle.phaseKey(cur) !== 'spike') {
     return res.status(409).json({
