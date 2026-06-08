@@ -2039,6 +2039,8 @@ app.post('/api/tareas/:id/completar', async (req, res) => {
   }
   // 3) borrar los tests TEMPORALES (lo persistente se queda como regresión)
   mutateTestsPlan(ROOT, tarea.id, (p) => quitarTemporales(p));
+  // 4) ya está en master → su worktree no hace falta: lo retiramos (si no, se acumulan).
+  try { limpiarWorktreeDeTarea(readTarea(ROOT, tarea.id)); } catch {}
   res.json({ ok: true, prueba, merge });
 });
 
@@ -2070,6 +2072,8 @@ app.delete('/api/tareas/:id', (req, res) => {
   }
   // su hilo propio se va con ella.
   if (tarea.threadId) { try { deleteChat(ROOT, tarea.threadId); } catch {} }
+  // y su worktree de construcción, si dejó uno (si no, se quedaría huérfano en .wt/).
+  try { limpiarWorktreeDeTarea(tarea); } catch {}
   try { deleteTarea(ROOT, req.params.id); }
   catch (e) { return res.status(500).json({ error: 'no se pudo borrar la tarea: ' + e.message }); }
   res.json({ deleted: req.params.id, restored: tarea.fromChat && tarea.fromMsg != null ? { chat: tarea.fromChat, msg: tarea.fromMsg } : null });
@@ -2227,10 +2231,30 @@ app.post('/api/tareas/:id/ejecutar', (req, res) => {
 
 // ¿Hay algo que TRAER de la tarea? (worktree existe + tiene cambios + no traída ya).
 // El front lo usa para enseñar/deshabilitar el botón "Traer el código".
+// Retira el worktree de una tarea (su sandbox de construcción) + su rama. Se llama
+// cuando la tarea YA no lo necesita: al llegar a master o al borrarla. Sin esto, los
+// worktrees se acumulaban en .wt/ (uno por tarea construida) para siempre. Best-effort:
+// si git falla, no tumba nada. Limpia también las marcas de build en la tarea.
+function limpiarWorktreeDeTarea(tarea) {
+  if (!tarea || !tarea.worktree) return;
+  const repo = (tarea.buildRepo && fs.existsSync(tarea.buildRepo)) ? tarea.buildRepo : targetRoot();
+  try { spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', tarea.worktree], { encoding: 'utf8' }); } catch {}
+  try { if (fs.existsSync(tarea.worktree)) fs.rmSync(tarea.worktree, { recursive: true, force: true }); } catch {}
+  try { spawnSync('git', ['-C', repo, 'worktree', 'prune'], { encoding: 'utf8' }); } catch {}
+  if (tarea.branch) { try { spawnSync('git', ['-C', repo, 'branch', '-D', tarea.branch], { encoding: 'utf8' }); } catch {} }
+  // NO tocamos las marcas de estado de la tarea (enMaster/builtAt): solo retiramos el
+  // sandbox del disco. `buildStatus` ya mira enMaster ANTES que el worktree, así que un
+  // tarea.worktree apuntando a un dir borrado no engaña al botón.
+  console.log(`[forge] tarea ${tarea.id}: worktree retirado (ya no hace falta).`);
+}
+
 function buildStatus(tarea) {
-  if (!tarea || !tarea.worktree || !fs.existsSync(tarea.worktree)) return { traible: false, reason: 'sin worktree' };
-  // ya en master = cierre feliz: no hay nada más que traer.
+  if (!tarea) return { traible: false, reason: 'sin worktree' };
+  // ya en master = cierre feliz: no hay nada más que traer. Se comprueba ANTES que el
+  // worktree porque al completar LIMPIAMOS el worktree (ya no hace falta) — y aun así
+  // la tarea sigue "ya en master", no "sin worktree".
   if (tarea.enMaster) return { traible: false, reason: 'ya en master' };
+  if (!tarea.worktree || !fs.existsSync(tarea.worktree)) return { traible: false, reason: 'sin worktree' };
   // build EN VIVO: mientras Miguel siga construyendo (mensaje vivo en el hilo) no se
   // sube nada a medias. (Un huérfano de una sesión anterior se apaga al arrancar.)
   if (tarea.threadId != null) {
@@ -2339,7 +2363,11 @@ app.post('/api/tareas/:id/traer', async (req, res) => {
   try { result = await mergeTareaToMaster(tarea.id); }
   catch (e) { return res.status(500).json({ error: 'el merge a master reventó: ' + e.message }); }
 
-  if (result.ok && result.enMaster) return res.json({ applied: true, enMaster: true, repo: result.repo, commit: result.commit });
+  if (result.ok && result.enMaster) {
+    // ya en master → retira el worktree (ya no hace falta; evita que se acumulen).
+    try { limpiarWorktreeDeTarea(readTarea(ROOT, tarea.id)); } catch {}
+    return res.json({ applied: true, enMaster: true, repo: result.repo, commit: result.commit });
+  }
   if (result.ok && result.empty)   return res.json({ applied: false, empty: true, message: result.message });
   if (result.incompatible) {
     return res.status(409).json({
