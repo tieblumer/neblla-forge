@@ -140,17 +140,6 @@
       },
       {
         "ref": "voces",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "apostolPrompt no revienta con un ángulo desconocido",
-        "dado": "apostolPrompt llamada con un angulo no contemplado o vacío",
-        "cuando": "se invoca el builder",
-        "entonces": "no lanza excepción y devuelve un string (degradación segura, nunca crash)",
-        "id": "T-24-04",
-        "codigo": "const { apostolPrompt } = await import(\"../../scripts/lib/forge-prompts.js\");\n// ángulo desconocido: NO debe reventar\nlet threw = false, out;\ntry { out = apostolPrompt({ angulo: \"judas\", worktreeDir: \"/wt/x\", baseRef: \"master\" }); }\ncatch (e) { threw = true; }\nr.ok(\"un ángulo desconocido NO lanza excepción\", threw === false);\nr.ok(\"un ángulo desconocido devuelve un string (degradación segura)\", typeof out === \"string\" && out.length > 0);\n// ángulo vacío: igual de robusto\nlet threw2 = false, out2;\ntry { out2 = apostolPrompt({ angulo: \"\", worktreeDir: \"/wt/x\", baseRef: \"master\" }); }\ncatch (e) { threw2 = true; }\nr.ok(\"un ángulo vacío tampoco lanza\", threw2 === false);\nr.ok(\"un ángulo vacío devuelve un string\", typeof out2 === \"string\" && out2.length > 0);"
-      },
-      {
-        "ref": "voces",
         "nivel": "persistente",
         "estado": "pasa",
         "titulo": "linaReconPrompt convierte la lista de Mateo en tests obligatorios y limita la vista",
@@ -280,24 +269,12 @@
         "entonces": "arranca otro Miguel con reanudacion=true sobre la MISMA rama (continúa desde donde lo dejó), sin empezar la reconstrucción de cero",
         "id": "T-24-16",
         "codigo": "let mod = {};\nfor (const p of [\"../../scripts/lib/forge-recon.js\", \"../../scripts/lib/forge-firme.js\"]) {\n  try { Object.assign(mod, await import(p)); } catch {}\n}\nconst keys = Object.keys(mod);\nr.ok(\"el cerebro del ciclo existe\", keys.length > 0);\nconst decide = mod.decidirReanudacion || mod.reanudarMiguel || mod.trasCaidaMiguel\n  || mod[keys.find((k) => typeof mod[k] === \"function\" && /(reanud|caid|reinten)/i.test(k))];\nr.ok(\"expone la decisión de reanudación de Miguel (paso 9)\", typeof decide === \"function\");\nif (typeof decide !== \"function\") return;\nlet res;\ntry { res = decide({ caido: true, todosVerde: false, rama: \"ciclo/recon-7\" }); } catch { res = null; }\nr.ok(\"ante una caída devuelve una decisión\", res && typeof res === \"object\");\nif (!res || typeof res !== \"object\") return;\nconst acc = String(res.accion ?? res.action ?? \"\");\nr.ok(\"lanza OTRO Miguel (no se rinde)\", res.reanudacion === true || res.relanzar === true || /reanud|relanz|lanzar|otro|continuar/i.test(acc));\nr.ok(\"marca que es reanudación (continúa, no desde cero)\", res.reanudacion === true || /reanud/i.test(JSON.stringify(res)));\nr.eq(\"sigue en la MISMA rama (no crea otra)\", res.rama ?? res.branch, \"ciclo/recon-7\");"
-      },
-      {
-        "ref": "orquestador",
-        "nivel": "temporal",
-        "estado": "pasa",
-        "titulo": "Anselmo y Miguel trabajan cada uno en su propio worktree",
-        "dado": "el orquestador reutilizando la plumbing de worktrees.js (mockeada)",
-        "cuando": "lanza a Anselmo (paso 2) y al Miguel gigante (paso 8)",
-        "entonces": "cada uno recibe su PROPIO git worktree aislado y el orquestador lo crea y lo desmonta usando worktrees.js/forge-merge.js",
-        "id": "T-24-17",
-        "codigo": "const fs = await import(\"fs\"); const path = await import(\"path\"); const { fileURLToPath } = await import(\"url\");\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), \"..\", \"..\");\nconst read = (p) => { try { return fs.readFileSync(path.join(ROOT, p), \"utf8\"); } catch { return \"\"; } };\nconst src = read(\"scripts/reconstruir.js\") + \"\\n\" + read(\"scripts/lib/forge-recon.js\") + \"\\n\" + read(\"scripts/lib/forge-firme.js\");\nr.ok(\"el orquestador del ciclo existe (reconstruir.js / forge-recon.js / forge-firme.js)\", src.trim().length > 0);\n// reutiliza la plomería de worktrees (no la duplica) para aislar a Anselmo (paso 2) y a Miguel (paso 8)\nr.ok(\"reutiliza worktrees.js para dar a cada uno su PROPIO worktree\", /worktrees/.test(src));\nr.ok(\"crea/desmonta worktrees con la plomería existente (worktrees.js / forge-merge.js)\", /worktrees/.test(src) && /forge-merge/.test(src));\n// y que Anselmo y Miguel aparezcan como dueños de worktree en el ciclo\nr.ok(\"el ciclo menciona a Anselmo y a Miguel (cada uno con su worktree)\", /anselmo/i.test(src) && /miguel/i.test(src));"
       }
     ],
     "aprobado": false,
     "aprobadoAt": null,
     "generado": true,
-    "generadoAt": "2026-06-08T04:36:53.592Z",
-    "ultimaCorrida": "2026-06-08T05:19:43.172Z"
+    "generadoAt": "2026-06-08T04:36:53.592Z"
   },
   "worktree": "C:\\Users\\TieBlumer\\Documents\\neblla\\.wt\\miguel-t024-1780893785704",
   "branch": "miguel/tarea-024-1780893785704",
@@ -307,5 +284,8 @@
   "construido": true,
   "construidoAt": "2026-06-08T04:50:17.665Z",
   "brought": true,
-  "broughtAt": "2026-06-08T05:19:43.627Z"
+  "broughtAt": "2026-06-08T05:19:43.627Z",
+  "enMaster": true,
+  "enMasterAt": "2026-06-08T05:19:44.067Z",
+  "masterCommit": "ad9c6af30d2405ce4e33ac5fd8ed585895dcebbc"
 }
