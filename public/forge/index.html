@@ -3300,7 +3300,27 @@
   let empezandoCiclo = false;
   async function empezarCiclo() {
     if (empezandoCiclo) return;   // anti doble-clic: crea rama + muchas conversaciones
-    if (!confirm('Empezar el ciclo:\n\n• BORRA el taller (todas las tareas y conversaciones, salvo la charla de Iris del objetivo).\n• Analiza la conversación, CREA la rama del ciclo (1-3 palabras) y pasa a Spike.\n• Iris abre los frentes por donde atacar y William sugiere tecnologías externas.\n\n¿Seguir?')) return;
+    // El aviso de BORRADO solo tiene sentido si de verdad hay algo que perder: tareas
+    // o conversaciones aparte de la charla de Iris del objetivo. Si el taller está
+    // vacío, un aviso neutro (no asustamos con un borrado que no borra nada).
+    let perdibles = 0;
+    try {
+      const [chats, tareas] = await Promise.all([
+        fetch('/api/chats').then((r) => r.json()).catch(() => []),
+        fetch('/api/tareas').then((r) => r.json()).catch(() => ({ tareas: [] })),
+      ]);
+      const convs = (Array.isArray(chats) ? chats : []).filter((c) => c.type !== 'backlog').length;
+      const ts = ((tareas && tareas.tareas) || []).length;
+      perdibles = convs + ts;
+    } catch {}
+    const aviso = perdibles > 0
+      ? 'Empezar el ciclo BORRA el taller (' + perdibles + ' tarea(s)/conversación(es), '
+        + 'salvo la charla de Iris del objetivo), analiza la charla, CREA la rama y pasa a Spike. '
+        + 'Iris abre los frentes y William sugiere tecnologías.\n\n¿Seguir?'
+      : 'Empezar el ciclo: analiza la charla, CREA la rama (1-3 palabras) y pasa a Spike. '
+        + 'Iris abre los frentes por donde atacar y William sugiere tecnologías.\n\n(El taller está '
+        + 'vacío, no se pierde nada.)\n\n¿Seguir?';
+    if (!confirm(aviso)) return;
     empezandoCiclo = true;
     if (btnEmpezarCiclo) btnEmpezarCiclo.disabled = true;
     try {
