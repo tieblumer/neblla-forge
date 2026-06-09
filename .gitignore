@@ -17,6 +17,9 @@ pantallazos/
 # contador de tokens (scripts/forge-token-log.js): registro de gasto por spawn,
 # artefacto de runtime que se regenera solo. Nunca a git.
 forge/sprint/token-log.jsonl
+# modelo global y calibrador de subvención: estado de runtime, se regeneran solos.
+forge/sprint/model.json
+forge/sprint/subsidy.json
 
 # forge machinery transient artifacts — never committed.
 scripts/_work/
