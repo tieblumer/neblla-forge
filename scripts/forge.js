@@ -33,6 +33,7 @@ import {
   mutateTestsPlan,
   stubMessageForTarea, restoreStubbedMessage, deleteTarea, resolveOrigen,
   readCyclePlan, clearCyclePlan,
+  readSubsidy, writeSubsidy,
 } from './lib/forge-store.js';
 import * as cycle from './lib/forge-firme.js';
 import { ordenar as ordenarTareas, GRUPOS as TAREA_GRUPOS, pasoConversacion } from './lib/forge-estado.js';
@@ -47,7 +48,8 @@ import { parsePlanBloque, normalizarPlan, validarPlan, planAPropuestaSubtareas, 
 import { parseTestsBloque, normalizarTestsPlan, fusionarTests, quitarTemporales, REF_GENERAL, aplicarResultadosCorrida, ensamblarTestFile } from './lib/forge-tests.js';
 import { sellarTestIds, testIdsParaSubtarea } from './lib/forge-testids.js';
 import { resolveProjectRoot } from './lib/target.js';
-import { logTokenUsage, extractUsage, parseCliResult, readTokenLog, summarizeRun, chooseCostTargets } from './lib/forge-token-log.js';
+import { logTokenUsage, extractUsage, parseCliResult, readTokenLog, summarizeRun, chooseCostTargets, sumCostUsd } from './lib/forge-token-log.js';
+import * as subsidy from './lib/forge-subsidy.js';
 import { listPeople, readPerson, writePerson, findByRol } from './lib/forge-people.js';
 import {
   trackStart, trackEnd, activeCount, scheduleRestart, setOnDrained, statusShort, statusFull,
@@ -1209,6 +1211,77 @@ async function fetchUsage() {
 app.get('/api/usage', async (_req, res) => {
   try { res.json(await fetchUsage()); }
   catch (e) { res.status(500).json({ available: false, reason: e.message }); }
+});
+
+// ── subvención: cuánto vale en $ equivalentes-API el 100 % de la ventana de 5 h ──
+// El forge gasta sobre la suscripción (cuota fija), pero el CLI reporta el coste
+// EQUIVALENTE-API de cada trabajo (lo que costaría por token en la API). Cruzando ese
+// gasto con el % de la ventana de 5 h (que mide Anthropic) calibramos, con datos
+// reales y de forma recurrente, cuánto subvenciona la suscripción. Lógica pura en
+// forge-subsidy.js; aquí solo el muestreo periódico y el cableado HTTP.
+const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
+
+// Un muestreo: lee el % de la ventana (cacheado 5 min) + el coste API-equivalente
+// acumulado del log, y se lo pasa al calibrador. Si encadena con el muestreo anterior
+// dentro del mismo ciclo, suma un delta Δ%/Δcoste. Best-effort: nunca tumba nada.
+async function subsidyTick() {
+  let u;
+  try { u = await fetchUsage(); } catch { return; }
+  if (!u || !u.available || !u.primary) return;
+  const util = (u.primary.usedPercent != null) ? Number(u.primary.usedPercent) : null;
+  const resetsAt = u.primary.resetsAt || null;
+  if (util == null || !resetsAt) return;
+  const totalCost = sumCostUsd(readTokenLog(ROOT));
+  const sample = { at: new Date().toISOString(), totalCost, util, resetsAt };
+  try {
+    const { state } = subsidy.recordSubsidySample(
+      readSubsidy(ROOT) || subsidy.emptySubsidy(), sample,
+      { minPct: 0.5, maxAgeMs: 45 * 24 * 60 * 60 * 1000 },
+    );
+    writeSubsidy(ROOT, state);
+  } catch (e) { console.error('[forge] subsidyTick:', e.message); }
+}
+
+// El veredicto: valor API del 100 % de la ventana (calibrado), gasto API-equivalente
+// (7d/30d/total), proyección del ciclo actual, y —si hay cuota configurada— el
+// múltiplo de subvención (lo que consumes en API frente a lo que pagas).
+app.get('/api/subsidy', async (_req, res) => {
+  const state = subsidy.normalizeSubsidy(readSubsidy(ROOT) || {});
+  const est = subsidy.estimateSubsidy(state);
+  const rows = readTokenLog(ROOT);
+  const now = Date.now();
+  const totalCost = sumCostUsd(rows);
+  const last30d = sumCostUsd(rows, { sinceTs: new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString() });
+  const last7d = sumCostUsd(rows, { sinceTs: new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString() });
+  // ciclo actual: % alcanzado + gasto desde el arranque del ciclo (resetsAt − 5 h) →
+  // proyección a 100 %. Estimación instantánea (más ruidosa que la calibrada).
+  let cycle = null;
+  try {
+    const u = await fetchUsage();
+    const w = u && u.primary;
+    if (w && w.usedPercent != null && w.resetsAt) {
+      const startMs = Date.parse(w.resetsAt) - FIVE_HOUR_MS;
+      const spent = Number.isFinite(startMs) ? sumCostUsd(rows, { sinceTs: new Date(startMs).toISOString() }) : null;
+      const util = Number(w.usedPercent);
+      cycle = { util, spent, resetsAt: w.resetsAt, projectedFull: (util > 0 && spent != null) ? spent / (util / 100) : null };
+    }
+  } catch { /* sin ciclo si el endpoint de uso falla */ }
+  const fee = state.feeMonthlyUsd;
+  const subsidyMultiple = (fee && fee > 0) ? last30d / fee : null;
+  res.json({
+    valuePer100: est.valuePer100, sampleCount: est.sampleCount,
+    observedPct: est.observedPct, observedCost: est.observedCost,
+    cycle, totalCost, last30d, last7d,
+    feeMonthlyUsd: fee, subsidyMultiple,
+  });
+});
+
+// Fija la cuota mensual de la suscripción (para el múltiplo de subvención). body {fee}.
+app.post('/api/subsidy/fee', (req, res) => {
+  const next = subsidy.setFee(readSubsidy(ROOT) || {}, req.body && req.body.fee);
+  try { writeSubsidy(ROOT, next); }
+  catch (e) { return res.status(500).json({ error: 'no se pudo guardar la cuota: ' + e.message }); }
+  res.json({ feeMonthlyUsd: next.feeMonthlyUsd });
 });
 
 // Modelo global de los headless: el navegador lo lee al cargar (para pintar el
@@ -2950,5 +3023,10 @@ app.listen(PORT, () => {
   // un veredicto real desde el minuto cero.
   setInterval(() => { autostartTick().catch(() => {}); }, 60 * 1000);
   autostartTick().catch(() => {});
+  // calibrador de subvención: muestrea el % de la ventana + el coste API-equivalente
+  // cada 5 min (el uso se cachea 5 min, así cada muestreo trae un % fresco). Un primer
+  // latido al arrancar deja sembrado el `last` para el primer delta.
+  setInterval(() => { subsidyTick().catch(() => {}); }, 5 * 60 * 1000);
+  subsidyTick().catch(() => {});
   openBrowser(url);
 });

@@ -107,6 +107,19 @@
   .um-win-fill.danger { background: #ff6b6b; }
   .um-win-sub { font-size: 11px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
   .um-stale { font-size: 11px; color: #e0a23a; margin-top: 8px; }
+  /* sección SUBVENCIÓN dentro del modal de uso */
+  .um-subsidy { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .um-subsidy h4 { margin: 0 0 8px; font-size: 13px; color: #fff; }
+  .um-sub-big { font-size: 22px; font-weight: 700; color: var(--secondary); font-variant-numeric: tabular-nums; }
+  .um-sub-big.danger { color: #ff6b6b; }
+  .um-sub-row { font-size: 12px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .um-sub-row b { color: var(--text); font-weight: 600; }
+  .um-sub-note { font-size: 10.5px; color: var(--muted); font-style: italic; margin-top: 6px; opacity: .85; line-height: 1.4; }
+  .um-fee { margin-top: 12px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .um-fee input { width: 84px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .um-fee input:focus { outline: none; border-color: var(--accent); }
+  .um-sub-mult { font-weight: 700; color: #2ec16a; }
   .bar-left { flex-direction: row; align-items: center; gap: 8px; }
   .bar-center { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
 
@@ -2452,8 +2465,12 @@
     }
     const n = msgs.length;
     const psig = pendingSig();
+    // La firma incluye el COSTE: la chapa $ se estampa al SALIR el agente, sin tocar
+    // el texto, así que sin esto el poll no detectaba el cambio y la chapa solo
+    // aparecía al recargar a mano. Con cost+costPrimary en la firma, re-pinta sola.
     const sig = msgs.map((m) =>
-      m.id + ':' + (m.text || '').length + ':' + (m.collapsed ? 1 : 0) + ':' + m.replyTo + ':' + (m.editedAt || '')).join('|');
+      m.id + ':' + (m.text || '').length + ':' + (m.collapsed ? 1 : 0) + ':' + m.replyTo + ':' + (m.editedAt || '')
+      + ':' + (m.costPrimary ? 1 : 0) + ':' + (m.cost ? (m.cost.usd == null ? 'n' : m.cost.usd) : '-')).join('|');
     if (n !== lastCount || psig !== lastPendingSig || sig !== lastSig) {
       lastCount = n; lastPendingSig = psig; lastSig = sig; renderThread(chat);
     }
@@ -3447,7 +3464,99 @@
     }
     if (!any) { const d = document.createElement('div'); d.className = 'um-win-sub'; d.textContent = '(sin datos de ventanas)'; box.appendChild(d); }
     if (lastUsage && lastUsage.stale) { const s = document.createElement('div'); s.className = 'um-stale'; s.textContent = '⚠️ dato cacheado (el endpoint estaba rate-limited)'; box.appendChild(s); }
+    // SUBVENCIÓN: cuánto vale en $ equivalentes-API el 100 % de la ventana + el gasto
+    // real, calibrado de forma recurrente. Se llena async (un fetch a /api/subsidy).
+    const subEl = document.createElement('div'); subEl.className = 'um-subsidy';
+    subEl.innerHTML = '<h4>Subvención (equivalente-API)</h4><div class="um-win-sub">calculando…</div>';
+    box.appendChild(subEl);
+    fetch('/api/subsidy').then((r) => r.json()).then((s) => renderSubsidy(subEl, s)).catch(() => {});
     modal.style.display = 'flex';
+  }
+
+  // Dinero "humano": 2 decimales a partir de 1 $, 4 por debajo (para céntimos).
+  function fmtMoney(v) {
+    if (v == null) return '—';
+    const n = Number(v);
+    return '$' + (Math.abs(n) >= 1 ? n.toFixed(2) : n.toFixed(4));
+  }
+
+  // Pinta la sección de subvención: el valor API del 100 % de la ventana (calibrado),
+  // el gasto API-equivalente (7d/30d/total), la proyección del ciclo en curso, y —si
+  // hay cuota configurada— el múltiplo de subvención (consumes / pagas).
+  function renderSubsidy(el, s) {
+    el.innerHTML = '';
+    const h = document.createElement('h4'); h.textContent = 'Subvención (equivalente-API)'; el.appendChild(h);
+
+    const big = document.createElement('div'); big.className = 'um-sub-big';
+    if (s.valuePer100 != null) {
+      big.textContent = fmtMoney(s.valuePer100) + ' / ventana 5h';
+    } else {
+      big.textContent = 'calibrando…'; big.style.fontSize = '15px';
+    }
+    el.appendChild(big);
+    const calib = document.createElement('div'); calib.className = 'um-sub-row';
+    if (s.valuePer100 != null) {
+      calib.innerHTML = 'Valor API del <b>100 %</b> de la ventana · cota inferior · '
+        + s.sampleCount + ' muestras, ' + Math.round(s.observedPct || 0) + ' % de ventana observado';
+    } else {
+      calib.textContent = 'Aún sin suficientes muestras (necesita ver moverse la ventana). Vuelve dentro de un rato.';
+    }
+    el.appendChild(calib);
+
+    // ciclo actual: proyección instantánea (más ruidosa que la calibrada)
+    if (s.cycle && s.cycle.projectedFull != null) {
+      const c = document.createElement('div'); c.className = 'um-sub-row';
+      c.innerHTML = 'Ciclo actual: <b>' + Math.round(s.cycle.util) + ' %</b> → '
+        + fmtMoney(s.cycle.spent) + ' gastados · proyección 100 % ≈ <b>' + fmtMoney(s.cycle.projectedFull) + '</b>';
+      el.appendChild(c);
+    }
+
+    // gasto API-equivalente real (esto SÍ es exacto: lo reporta el CLI por trabajo)
+    const g = document.createElement('div'); g.className = 'um-sub-row';
+    g.innerHTML = 'Gasto API-equivalente: 7d <b>' + fmtMoney(s.last7d) + '</b> · 30d <b>'
+      + fmtMoney(s.last30d) + '</b> · total <b>' + fmtMoney(s.totalCost) + '</b>';
+    el.appendChild(g);
+
+    // cuota mensual editable → múltiplo de subvención (30d consumido / cuota)
+    const fee = document.createElement('div'); fee.className = 'um-fee';
+    const lbl = document.createElement('span'); lbl.textContent = 'Tu cuota mensual: $';
+    const inp = document.createElement('input'); inp.type = 'number'; inp.min = '0'; inp.step = '1';
+    inp.placeholder = '0'; if (s.feeMonthlyUsd != null) inp.value = s.feeMonthlyUsd;
+    const unit = document.createElement('span'); unit.textContent = '/mes';
+    fee.appendChild(lbl); fee.appendChild(inp); fee.appendChild(unit);
+    el.appendChild(fee);
+
+    const mult = document.createElement('div'); mult.className = 'um-sub-row';
+    const pintarMult = (data) => {
+      if (data.subsidyMultiple != null) {
+        mult.innerHTML = 'Subvención (30d): consumes <b>' + fmtMoney(data.last30d) + '</b> en API, pagas <b>$'
+          + Number(data.feeMonthlyUsd).toFixed(0) + '</b> → <span class="um-sub-mult">×' + data.subsidyMultiple.toFixed(1) + '</span>';
+      } else {
+        mult.textContent = 'Pon tu cuota para ver el múltiplo de subvención.';
+      }
+    };
+    pintarMult(s);
+    el.appendChild(mult);
+
+    // guardar la cuota al cambiarla → re-pinta el múltiplo con datos frescos
+    inp.onchange = async () => {
+      const v = inp.value.trim();
+      try {
+        const res = await fetch('/api/subsidy/fee', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fee: v === '' ? 0 : Number(v) }),
+        });
+        if (!res.ok) return;
+        const fresh = await (await fetch('/api/subsidy')).json();
+        pintarMult(fresh);
+      } catch {}
+    };
+
+    const note = document.createElement('div'); note.className = 'um-sub-note';
+    note.textContent = 'El valor del 100 % es una COTA INFERIOR: si usas la misma suscripción en '
+      + 'sesiones interactivas a la vez, mueven la ventana sin contar en el log del forge, así que el '
+      + 'valor real es mayor. El "gasto API-equivalente" sí es exacto (lo reporta el CLI por trabajo).';
+    el.appendChild(note);
   }
 
   // ── estado de la forja: lucecita + contador de claudes + apagado ordenado ────

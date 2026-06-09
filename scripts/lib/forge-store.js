@@ -47,6 +47,24 @@ export function writeCycle(root, state) {
   return state;
 }
 
+// ── subvención de la suscripción (calibrador del valor API de la ventana) ─────
+// Un sidecar sprint/subsidy.json guarda el estado del calibrador (último muestreo +
+// los deltas Δ%/Δcoste acumulados + la cuota mensual configurada). Persiste a
+// reinicios; se va afinando con el tiempo. La lógica vive en forge-subsidy.js (pura).
+export function subsidyPath(root) {
+  return path.join(root, 'forge', 'sprint', 'subsidy.json');
+}
+
+export function readSubsidy(root) {
+  try { return JSON.parse(fs.readFileSync(subsidyPath(root), 'utf8')); }
+  catch { return null; }
+}
+
+export function writeSubsidy(root, state) {
+  atomicWrite(subsidyPath(root), JSON.stringify(state, null, 2) + '\n');
+  return state;
+}
+
 // ── scratch del ANÁLISIS de arranque del ciclo ───────────────────────────────
 // "Empezar ciclo" lanza dos analistas headless (Iris → rama + frentes; William →
 // tecnologías externas). Su criterio (datos puros) lo graban vía MCP en estos

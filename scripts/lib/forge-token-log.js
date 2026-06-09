@@ -51,6 +51,23 @@ export function readTokenLog(root) {
   return out;
 }
 
+// Suma el coste (costUsd, equivalente-API que reporta el CLI) de las filas del log,
+// opcionalmente solo las posteriores a `sinceTs` (ISO). Pura. null/ausente → 0.
+// La usa el calibrador de subvención (gasto API-equivalente acumulado / por ciclo).
+export function sumCostUsd(rows, { sinceTs = null } = {}) {
+  const since = sinceTs ? Date.parse(sinceTs) : null;
+  let total = 0;
+  for (const r of (Array.isArray(rows) ? rows : [])) {
+    if (!r) continue;
+    if (since != null) {
+      const t = Date.parse(r.ts);
+      if (Number.isFinite(t) && t < since) continue;
+    }
+    total += Number(r.costUsd) || 0;
+  }
+  return total;
+}
+
 // Filtra las filas de un `runId` y agrega sus totales. Función PURA (testable sin
 // servidor). Trata null/ausente como 0 en las sumas. Si no hay filas → totales a
 // 0 y requests vacío (nunca lanza).
