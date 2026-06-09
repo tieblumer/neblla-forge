@@ -18,7 +18,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
-import { appendMessage, replaceMessageText, readChat, readTarea, mutateTestsPlan, setTareaPlan, setMessagePlan, writeCyclePlan } from './lib/forge-store.js';
+import { appendMessage, replaceMessageText, readChat, readTarea, mutateTestsPlan, setTareaPlan, setMessagePlan, writeCyclePlan, setGroomingDecision } from './lib/forge-store.js';
 import { normalizarTestsPlan, fusionarTests, normalizarEstadoTest, ensamblarTestFile, aplicarResultadosCorrida } from './lib/forge-tests.js';
 import { normalizarPlan, renderPlanTexto, COMPLEJIDADES } from './lib/forge-plan.js';
 
@@ -266,7 +266,33 @@ const TECH_CICLO_TOOL = {
   },
 };
 
-const TOOLS = [TOOL, PREGUNTAR_TOOL, BACKBONE_RESUMEN_TOOL, BACKBONE_COMPLETO_TOOL, LEER_FEATURE_TOOL, DEFINIR_TESTS_TOOL, ESCRIBIR_TEST_TOOL, CORRER_TESTS_TOOL, PROPONER_PLAN_TOOL, PLAN_CICLO_TOOL, TECH_CICLO_TOOL];
+// ── decisión de grooming (Iris, en un frente, tras leer a Stevens) ────────────
+// Iris escribe su reacción con `contestar` y ADEMÁS registra aquí su decisión como
+// DATO; el forge la lee al salir y ejecuta el paso (archivar / reorientar / proceder
+// / contestar). Llámala UNA vez, junto a tu mensaje.
+const DECIDIR_FRENTE_TOOL = {
+  name: 'decidir_frente',
+  description: 'Registra tu DECISIÓN sobre este frente tras leer la auditoría de Stevens (eres Iris). '
+    + 'Antes escribe tu reacción con `contestar`; luego llama a esto UNA vez con la acción:\n'
+    + '• "archivar" — no aporta (ya está hecho / no merece la pena). La conversación va a Archivadas.\n'
+    + '• "reorientar" — parte ya está, pero hay un hueco real: cambia el foco a lo que FALTA '
+    + '(pásalo en `nuevoEnfoque`). Stevens volverá a auditar ese nuevo foco.\n'
+    + '• "proceder" — hay camino real y construible: seguimos (William aporta tecnología y Aubé planifica).\n'
+    + '• "contestar" — NO estás de acuerdo con Stevens y quieres la opinión de Tie. Tu mensaje (contestar) '
+    + 'debe ser la pregunta para él; el ciclo pausa hasta que responda.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      accion: { type: 'string', enum: ['archivar', 'reorientar', 'proceder', 'contestar'], description: 'Qué hacer con el frente.' },
+      nuevoEnfoque: { type: 'string', description: 'Solo en "reorientar": el nuevo foco (lo que Stevens dijo que falta).' },
+      motivo: { type: 'string', description: 'Una línea: por qué esta decisión.' },
+    },
+    required: ['accion'],
+    additionalProperties: false,
+  },
+};
+
+const TOOLS = [TOOL, PREGUNTAR_TOOL, BACKBONE_RESUMEN_TOOL, BACKBONE_COMPLETO_TOOL, LEER_FEATURE_TOOL, DEFINIR_TESTS_TOOL, ESCRIBIR_TEST_TOOL, CORRER_TESTS_TOOL, PROPONER_PLAN_TOOL, PLAN_CICLO_TOOL, TECH_CICLO_TOOL, DECIDIR_FRENTE_TOOL];
 
 // La tarea de este hilo (CHAT_ID → chat.tareaId → tarea). null si el hilo no es de tarea.
 function tareaDelHilo() {
@@ -347,6 +373,28 @@ function handlePlanCiclo(id, args) {
     return reply(id, { isError: true, content: [{ type: 'text', text: 'No pude guardar el plan del ciclo: ' + e.message }] });
   }
   reply(id, { content: [{ type: 'text', text: `Arranque registrado: rama "${rama}" y ${frentes.length} frente(s). El forge creará la rama y abrirá las conversaciones; con esto has terminado.` }] });
+}
+
+// Iris (en un frente): registra su decisión en grooming.decision. El forge la lee
+// al salir el headless y ejecuta el paso. No escribe mensaje (eso lo hace `contestar`).
+function handleDecidirFrente(id, args) {
+  if (!CHAT_ID) return reply(id, { isError: true, content: [{ type: 'text', text: 'No sé en qué frente decidir (falta FORGE_CHAT_ID).' }] });
+  const accion = String((args && args.accion) || '').trim();
+  if (!['archivar', 'reorientar', 'proceder', 'contestar'].includes(accion)) {
+    return reply(id, { isError: true, content: [{ type: 'text', text: 'accion inválida; usa archivar | reorientar | proceder | contestar.' }] });
+  }
+  const decision = {
+    accion,
+    nuevoEnfoque: String((args && args.nuevoEnfoque) || '').trim(),
+    motivo: String((args && args.motivo) || '').trim(),
+    at: new Date().toISOString(),
+  };
+  if (accion === 'reorientar' && !decision.nuevoEnfoque) {
+    return reply(id, { isError: true, content: [{ type: 'text', text: 'Para "reorientar" hace falta `nuevoEnfoque` (a qué cambias el foco).' }] });
+  }
+  try { setGroomingDecision(ROOT, CHAT_ID, decision); }
+  catch (e) { return reply(id, { isError: true, content: [{ type: 'text', text: 'No pude guardar la decisión: ' + e.message }] }); }
+  reply(id, { content: [{ type: 'text', text: `Decisión registrada: ${accion}. El forge seguirá desde aquí; con esto y tu mensaje has terminado.` }] });
 }
 
 // William analista: graba {sugerencias} en el scratch (1-3 tecnologías externas).
@@ -525,6 +573,7 @@ function handle(msg) {
       if (name === 'proponer_plan') return handleProponerPlan(id, args);
       if (name === 'plan_ciclo') return handlePlanCiclo(id, args);
       if (name === 'tech_ciclo') return handleTechCiclo(id, args);
+      if (name === 'decidir_frente') return handleDecidirFrente(id, args);
       if (name !== 'contestar') {
         return fail(id, -32602, 'herramienta desconocida: ' + name);
       }

@@ -270,6 +270,21 @@
   .chat-item:hover .chat-del, .chat-item.active .chat-del { opacity: 1; }
   .chat-del:hover { color: #ff6b6b; border-color: #ff6b6b; }
   .empty { color: var(--muted); padding: 24px 16px; text-align: center; font-size: 13px; }
+  /* badge de estado del grooming automático en una conversación (pausa / en marcha) */
+  .gr-badge { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700;
+    border-radius: 6px; padding: 0 5px; vertical-align: middle; white-space: nowrap; }
+  .gr-badge.wait  { color: var(--accent-ink); background: var(--accent); }
+  .gr-badge.ready { color: #07210f; background: #2ec16a; }
+  .gr-badge.warn  { color: #2a1010; background: #ff6b6b; }
+  .gr-badge.run   { color: var(--muted); border: 1px solid var(--border); }
+  /* cajón "Archivadas" al fondo del carril (plegable, como los grupos de tareas) */
+  .archivadas-head { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; display: flex; align-items: center; gap: 6px; cursor: pointer;
+    padding: 10px 10px 4px; margin-top: 8px; border-top: 1px solid var(--border); user-select: none; }
+  .archivadas-head:hover { color: var(--secondary); }
+  .archivadas-head .ah-arrow { font-size: 9px; width: 9px; }
+  .archivadas-head .ah-n { font-weight: 600; opacity: .7; }
+  .chat-item.archivada .title { color: var(--muted); font-style: italic; }
 
   /* CENTRO: hilo arriba (scroll), compositor abajo */
   /* el carril central que scrollea: contiene la ficha de la tarea + el hilo, así
@@ -1398,6 +1413,39 @@
   }
 
   // ── listas ───────────────────────────────────────────────────────────────────
+  // El badge de estado del grooming automático de una conversación (o null). Las
+  // pausas (esperan algo de ti) destacan; los pasos en marcha llevan un ⏳ discreto.
+  function groomingBadge(g) {
+    if (!g || !g.estado) return null;
+    const M = {
+      'pausa-opinion': { txt: '⏸ tu opinión', cls: 'wait', t: 'Iris pide tu opinión — responde y el ciclo sigue solo' },
+      'pausa-tarea':   { txt: '⏸ crear tarea', cls: 'ready', t: 'Aubé propuso el plan — crea la tarea cuando quieras' },
+      'pausa-tie':     { txt: '⏸ tu turno', cls: 'wait', t: 'Revisada — tu turno' },
+      'pausa-tope':    { txt: '⏸ atascada', cls: 'warn', t: 'Dio muchas vueltas sin camino claro — revísala' },
+      'pausa-error':   { txt: '⚠ revisar', cls: 'warn', t: 'Algo falló en el flujo automático — revísala' },
+      'archivado':     null,
+    };
+    if (Object.prototype.hasOwnProperty.call(M, g.estado)) return M[g.estado];
+    return { txt: '⏳', cls: 'run', t: 'Trabajando (' + g.estado + ')' };   // stevens/iris/william/aubé en marcha
+  }
+
+  function renderChatItem(c) {
+    const li = document.createElement('li');
+    li.className = 'chat-item' + (c.id === active ? ' active' : '') + (c.archived ? ' archivada' : '');
+    li.innerHTML = '<div class="row"><div class="body"><div class="title"></div></div>'
+      + '<button class="chat-del" title="Borrar conversación (definitivo)">🗑</button></div>';
+    li.dataset.chatId = c.id;
+    const titleEl = li.querySelector('.title');
+    titleEl.textContent = c.title;
+    titleEl.title = c.title + '  (#' + c.id + ' · ' + (c.type || '') + ')';
+    const b = groomingBadge(c.grooming);
+    if (b) { const el = document.createElement('span'); el.className = 'gr-badge ' + b.cls; el.textContent = b.txt; el.title = b.t; titleEl.appendChild(el); }
+    pintarIconosTareas(titleEl, c.id);
+    li.querySelector('.body').onclick = () => openChat(c.id);
+    li.querySelector('.chat-del').onclick = (e) => { e.stopPropagation(); deleteChat(c); };
+    return li;
+  }
+
   async function loadList() {
     const all = await (await fetch('/api/chats')).json();
     // En "Nuevo ciclo" la única conversación es la de Iris: la lista muestra SOLO los
@@ -1408,18 +1456,20 @@
       listEl.innerHTML = '<li class="empty">Todavía no hay conversaciones.<br>Crea la primera.</li>';
       return chats;
     }
-    for (const c of chats.slice().reverse()) {
-      const li = document.createElement('li');
-      li.className = 'chat-item' + (c.id === active ? ' active' : '');
-      li.innerHTML = '<div class="row"><div class="body"><div class="title"></div></div>'
-        + '<button class="chat-del" title="Borrar conversación (definitivo)">🗑</button></div>';
-      li.dataset.chatId = c.id;
-      li.querySelector('.title').textContent = c.title;
-      li.querySelector('.title').title = c.title + '  (#' + c.id + ' · ' + (c.type || '') + ')';
-      pintarIconosTareas(li.querySelector('.title'), c.id);
-      li.querySelector('.body').onclick = () => openChat(c.id);
-      li.querySelector('.chat-del').onclick = (e) => { e.stopPropagation(); deleteChat(c); };
-      listEl.appendChild(li);
+    const activos = chats.filter((c) => !c.archived);
+    const archivadas = chats.filter((c) => c.archived);
+    for (const c of activos.slice().reverse()) listEl.appendChild(renderChatItem(c));
+    // cajón "Archivadas" al fondo (plegable; por defecto plegado). Iris archiva aquí lo
+    // que no aporta — lo puedes abrir y leer, sabiendo que ya no está en el flujo.
+    if (archivadas.length) {
+      const colapsado = localStorage.getItem('forge.archivadasColapsado') !== '0';
+      const head = document.createElement('li');
+      head.className = 'archivadas-head';
+      head.innerHTML = '<span class="ah-arrow">' + (colapsado ? '▸' : '▾') + '</span> Archivadas '
+        + '<span class="ah-n">' + archivadas.length + '</span>';
+      head.onclick = () => { localStorage.setItem('forge.archivadasColapsado', colapsado ? '0' : '1'); loadList(); };
+      listEl.appendChild(head);
+      if (!colapsado) for (const c of archivadas.slice().reverse()) listEl.appendChild(renderChatItem(c));
     }
     return chats;
   }
@@ -3353,12 +3403,13 @@
   }
 
   // Poller acotado tras "Empezar ciclo": cada 3s refresca /api/cycle (para ver la
-  // rama cuando Iris la decide) y la lista (para ver entrar frentes/tecnologías).
-  // Se apaga solo a los ~5 min. No es permanente: solo cubre el arranque del ciclo.
+  // rama cuando Iris la decide) y la lista (para ver entrar frentes/tecnologías y cómo
+  // avanzan sus badges de grooming). Ventana de ~20 min: cubre el arranque + el grooming
+  // automático (Stevens→Iris→…), que dura más que el arranque solo. No es permanente.
   let cicloPollTimer = null;
   function arrancarPollCiclo(durMs) {
     if (cicloPollTimer) clearInterval(cicloPollTimer);
-    const stopAt = Date.now() + (durMs || 5 * 60 * 1000);
+    const stopAt = Date.now() + (durMs || 20 * 60 * 1000);
     cicloPollTimer = setInterval(async () => {
       try { await loadCycle(); if (!nuevoActive) await loadList(); } catch {}
       if (Date.now() > stopAt) { clearInterval(cicloPollTimer); cicloPollTimer = null; }
@@ -3808,6 +3859,11 @@
       return;
     }
     openChat(chats[chats.length - 1].id); // la más reciente
+    // si quedó grooming en marcha (refrescaste a mitad), mantén la lista viva para ver
+    // avanzar los badges hasta que las conversaciones queden en pausa o archivadas.
+    try {
+      if (chats.some((c) => c.grooming && !/^(pausa|archivado)/.test(c.grooming.estado))) arrancarPollCiclo();
+    } catch {}
   }
   init();
 </script>

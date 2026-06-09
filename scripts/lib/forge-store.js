@@ -180,7 +180,8 @@ export function listChats(root) {
     .map((f) => {
       try {
         const c = JSON.parse(fs.readFileSync(path.join(chatsDir(root), f), 'utf8'));
-        return { id: c.id, num: c.num, type: c.type, title: c.title, createdAt: c.createdAt };
+        return { id: c.id, num: c.num, type: c.type, title: c.title, createdAt: c.createdAt,
+          archived: !!c.archived, grooming: c.grooming ? { estado: c.grooming.estado, tipo: c.grooming.tipo } : null };
       } catch { return null; }
     })
     .filter(Boolean)
@@ -216,6 +217,43 @@ export function createChat(root, { type, title, target } = {}) {
   };
   writeChat(root, chat);
   return chat;
+}
+
+// ── estado de GROOMING de una conversación automática ────────────────────────
+// Las conversaciones que abre "Empezar ciclo" (frentes de Iris, tech de William)
+// corren una secuencia automática (máquina de estados en forge.js). El estado vive
+// en chat.grooming = { tipo, estado, ronda, item, enfoque, decision }. Y `archived`
+// marca las que Iris decidió archivar (van al cajón "Archivadas" del carril).
+export function mergeGrooming(root, id, patch) {
+  return withChatLock(root, id, () => {
+    const chat = readChat(root, id);
+    if (!chat) return null;
+    chat.grooming = { ...(chat.grooming || {}), ...(patch || {}) };
+    writeChat(root, chat);
+    return chat;
+  });
+}
+
+export function readGrooming(root, id) {
+  const c = readChat(root, id);
+  return c ? (c.grooming || null) : null;
+}
+
+// Iris registra su decisión (vía MCP decidir_frente): la dejamos en grooming.decision
+// para que el orquestador la lea al salir el headless.
+export function setGroomingDecision(root, id, decision) {
+  return mergeGrooming(root, id, { decision });
+}
+
+// Marca/desmarca la conversación como ARCHIVADA (cajón "Archivadas"). No borra nada.
+export function markArchived(root, id, val = true) {
+  return withChatLock(root, id, () => {
+    const chat = readChat(root, id);
+    if (!chat) return null;
+    if (val) chat.archived = true; else delete chat.archived;
+    writeChat(root, chat);
+    return chat;
+  });
 }
 
 // Borra una conversación de disco (borrado DEFINITIVO). Devuelve true si existía y

@@ -34,6 +34,7 @@ import {
   stubMessageForTarea, restoreStubbedMessage, deleteTarea, resolveOrigen,
   readCyclePlan, clearCyclePlan,
   readSubsidy, writeSubsidy,
+  mergeGrooming, readGrooming, markArchived,
 } from './lib/forge-store.js';
 import * as cycle from './lib/forge-firme.js';
 import { ordenar as ordenarTareas, GRUPOS as TAREA_GRUPOS, pasoConversacion } from './lib/forge-estado.js';
@@ -1519,6 +1520,19 @@ app.post('/api/chats/:id/charla', (req, res) => {
     if ((chat.messages || []).some((m) => m.id === pid)) parent = pid;
   }
 
+  // ── REANUDACIÓN del grooming (camino "contestar"): si la conversación está pausada
+  // esperando TU opinión, tu respuesta re-lanza la DECISIÓN de Iris (re-evalúa con tu
+  // input ya en el hilo), no la charla normal.
+  if (hasText && chat.grooming && chat.grooming.estado === 'pausa-opinion') {
+    let tieMsg;
+    try {
+      tieMsg = appendMessage(ROOT, id, { type: 'charla', author: 'tie', intent: 'request', replyTo: parent, text: String(text).trim() });
+    } catch (e) { return res.status(500).json({ error: 'no se pudo guardar: ' + e.message }); }
+    try { mergeGrooming(ROOT, id, { estado: 'iris-decide', decision: null }); avanzarGrooming(id); }
+    catch (e) { console.error('[forge] no pude reanudar el grooming:', e.message); }
+    return res.status(202).json({ message: tieMsg, pendingParent: tieMsg.id, spawned: true, resumed: true });
+  }
+
   // ── Modo PROACTIVO: input VACÍO + bloque seleccionado. Iris arranca la charla
   // sobre ese bloque por iniciativa propia (qué es, qué hace, dudas), sin que Tie
   // teclee nada. NO se crea turno de Tie: la respuesta de Iris cuelga del bloque.
@@ -2705,34 +2719,215 @@ function crearRamaCiclo(repoRoot, palabras) {
 // lo que se propone, y cuelga su veredicto del mensaje de apertura. Voz directa y fría
 // (es su sello: hechos, cero adornos). Reusa su prompt de auditoría con un foco
 // específico. Se llama desde el onDone del opener, solo si el opener llegó a publicar.
-function lanzarStevensVeredicto(chatId, kind, item, repoRoot) {
-  // el opener ya publicó: Stevens cuelga su veredicto de ese mensaje.
-  let parentId = null;
+// ── ORQUESTADOR DE GROOMING ───────────────────────────────────────────────────
+// Cada conversación que abre "Empezar ciclo" corre una secuencia automática:
+//
+//   FRENTE (lo abre Iris):  iris(opener) → stevens → iris DECIDE ─┬ archivar
+//                                                                 ├ reorientar → stevens → … (tope 3)
+//                                                                 ├ proceder  → william → aubé → ⏸tarea
+//                                                                 └ contestar → ⏸opinión (reanuda al responder)
+//   TECH (la abre William): william(opener) → stevens → iris → ⏸tu turno
+//
+// El estado vive en chat.grooming (forge-store); el avance lo conduce cada `onDone`.
+const GROOMING_TOPE_REORIENTAR = 3;
+
+// El último mensaje de un autor en el hilo (para colgar la réplica del agente).
+function ultimoDe(chatId, autor) {
   try {
-    const autor = kind === 'tech' ? 'william' : 'iris';
-    const suyos = ((readChat(ROOT, chatId)?.messages) || []).filter((m) => m.author === autor);
-    if (suyos.length) parentId = suyos[suyos.length - 1].id;
-  } catch {}
-  const quien = kind === 'tech' ? 'William (una tecnología/herramienta externa)' : 'Iris (un frente por donde atacar)';
-  const detalle = kind === 'tech' ? (item.porque || '') : (item.angulo || '');
-  const focoText = [
-    `Acaba de abrirse esta conversación: ${quien} propone "${item.titulo || 'sin título'}".`,
-    detalle ? 'Lo que se propone: ' + detalle : '',
-    'Tu foco es el ESTADO REAL del código frente a esta propuesta: ¿lo que hay hoy la',
-    'CONTRADICE en algo (ya está implementado de otra forma, asume algo que no se cumple,',
-    'choca con cómo está montado)?',
-  ].filter(Boolean).join('\n');
-  const steer = 'Revisión RÁPIDA del código. Di si el estado actual contradice lo que se '
-    + 'propone aquí: si hay contradicción, señálala con fichero y sitio exactos; si no la hay, '
-    + 'dilo en una línea. Veredicto directo y frío, sin cortesías ni adornos.';
+    const ms = (readChat(ROOT, chatId)?.messages || []).filter((m) => m.author === autor && !m.collapsed);
+    return ms.length ? ms[ms.length - 1].id : null;
+  } catch { return null; }
+}
+
+// Deja la conversación en una PAUSA (estado terminal hasta que Tie actúe). No lanza nada.
+function pausaGrooming(chatId, estado, motivo) {
+  try { mergeGrooming(ROOT, chatId, { estado }); } catch {}
+  if (motivo) console.log(`[forge] grooming ${chatId}: ${estado} — ${motivo}`);
+}
+
+// Stevens audita el FOCO actual: en un frente, ¿el código lo contradice / qué falta?;
+// en una tech, ¿ya se usa / encaja o choca? Su veredicto cuelga del opener.
+function lanzarStevensGrooming(chatId, g, repoRoot) {
+  const item = g.item || {};
+  const enfoque = g.enfoque || item.angulo || item.porque || item.titulo || '';
+  const focoText = g.tipo === 'tech'
+    ? [
+        `William propone esta tecnología/técnica externa: "${item.titulo || 'sin título'}".`,
+        enfoque ? 'Por qué la propone: ' + enfoque : '',
+        'Tu foco es el ESTADO REAL del código: ¿ya se usa o ya está implementada? ¿encaja con',
+        'cómo está montado o choca? Di los hechos, con fichero y sitio cuando aplique.',
+      ].filter(Boolean).join('\n')
+    : [
+        `El frente en juego ahora mismo es: "${enfoque || item.titulo || 'sin título'}".`,
+        'Tu foco es el ESTADO REAL del código frente a este frente: ¿qué hay YA implementado',
+        '(¿lo contradice, está a medias?) y qué FALTA de verdad. Sé concreto: fichero y sitio.',
+      ].join('\n');
+  const steer = 'Revisión RÁPIDA. Distingue lo construido de lo que falta; si algo ya está hecho '
+    + 'dilo claro (con fichero y sitio). Directo y frío, sin adornos.';
   launchHeadless({
     chatId, cwd: repoRoot,
-    prompt: stevensPrompt({
-      threadText: buildThreadText(chatId), focoText, steer,
-      target: targetDesc(), voz: vozDe('stevens'), puedeLeer: puedeLeerCodigo('stevens'),
-    }),
-    extraEnv: { FORGE_AUTHOR: 'stevens', FORGE_MSG_TYPE: 'investigacion', FORGE_INTENT: 'answer', FORGE_REPLY_TO: parentId == null ? '' : String(parentId) },
+    prompt: stevensPrompt({ threadText: buildThreadText(chatId), focoText, steer, target: targetDesc(), voz: vozDe('stevens'), puedeLeer: puedeLeerCodigo('stevens') }),
+    extraEnv: { FORGE_AUTHOR: 'stevens', FORGE_MSG_TYPE: 'investigacion', FORGE_INTENT: 'answer', FORGE_REPLY_TO: '' },
+    onDone: ({ failed, reported }) => {
+      if (failed || !reported) return pausaGrooming(chatId, 'pausa-error', 'Stevens no entregó');
+      mergeGrooming(ROOT, chatId, { estado: g.tipo === 'tech' ? 'iris-tech' : 'iris-decide' });
+      avanzarGrooming(chatId);
+    },
   });
+}
+
+// Iris lee la auditoría de Stevens y DECIDE (archivar/reorientar/proceder/contestar).
+// Escribe su reacción con `contestar` y registra la decisión con `decidir_frente`.
+function irisDecidePrompt(g) {
+  const item = g.item || {};
+  const enfoque = g.enfoque || item.angulo || item.titulo || '';
+  const ronda = g.ronda || 0;
+  const cerca = ronda >= GROOMING_TOPE_REORIENTAR - 1;
+  return [
+    'Eres Iris, la CTO de Neblla. Arriba tienes un FRENTE que abriste y, debajo, la auditoría',
+    'fría de Stevens sobre el estado REAL del código para ese frente.',
+    '',
+    'El frente en juego ahora: "' + (enfoque || item.titulo || 'sin título') + '".',
+    '',
+    'Tu trabajo: leer lo que dice Stevens y DECIDIR el rumbo. Pesa su criterio técnico (es el',
+    'estado real del código), pero la decisión es tuya. Escribe primero una reacción BREVE y en',
+    'cristiano con `contestar`, y luego registra la decisión con `decidir_frente` (una sola vez):',
+    '',
+    '  • archivar — lo que proponía este frente YA está hecho o no aporta. Tu mensaje explica por qué.',
+    '  • reorientar — parte ya está, pero Stevens señala un hueco REAL: cambia el foco a lo que falta.',
+    '      Tu mensaje plantea el nuevo enfoque; pásalo también en `nuevoEnfoque`. Stevens lo re-auditará.',
+    '  • proceder — hay un camino real y construible: seguimos (entrará William con tecnología y luego Aubé).',
+    '  • contestar — NO estás de acuerdo con Stevens y quieres el criterio de Tie. Tu mensaje (contestar)',
+    '      debe ser la PREGUNTA para él; el ciclo pausa hasta que responda.',
+    '',
+    cerca
+      ? 'AVISO: ya llevas ' + ronda + ' reorientación(es) en este frente (tope ' + GROOMING_TOPE_REORIENTAR
+        + '). Si no ves un camino claro ya, mejor archivar o pedir opinión a Tie que seguir dando vueltas.'
+      : '',
+    '',
+    'Tu única forma de escribir es `contestar`; la decisión, `decidir_frente`. En cuanto hagas ambas, termina.',
+  ].filter(Boolean).join('\n');
+}
+function lanzarIrisDecide(chatId, g, repoRoot) {
+  mergeGrooming(ROOT, chatId, { decision: null });   // limpia una decisión vieja
+  launchHeadless({
+    chatId, cwd: repoRoot,
+    prompt: irisDecidePrompt(g),
+    allowedTools: 'mcp__forge__backbone_resumen,mcp__forge__backbone_completo,mcp__forge__leer_feature,mcp__forge__contestar,mcp__forge__decidir_frente',
+    extraEnv: { FORGE_AUTHOR: 'iris', FORGE_MSG_TYPE: 'charla', FORGE_INTENT: 'answer', FORGE_REPLY_TO: String(ultimoDe(chatId, 'stevens') || '') },
+    onDone: ({ failed }) => {
+      if (failed) return pausaGrooming(chatId, 'pausa-error', 'Iris falló decidiendo');
+      const g2 = readGrooming(ROOT, chatId) || {};
+      const dec = g2.decision;
+      if (!dec || !dec.accion) return pausaGrooming(chatId, 'pausa-opinion', 'Iris no registró decisión');
+      if (dec.accion === 'archivar') {
+        try { markArchived(ROOT, chatId, true); } catch {}
+        return pausaGrooming(chatId, 'archivado', 'Iris archivó');
+      }
+      if (dec.accion === 'contestar') {
+        return pausaGrooming(chatId, 'pausa-opinion', 'Iris pide opinión a Tie');
+      }
+      if (dec.accion === 'proceder') {
+        mergeGrooming(ROOT, chatId, { estado: 'william', decision: null });
+        return avanzarGrooming(chatId);
+      }
+      // reorientar
+      const ronda = (g2.ronda || 0) + 1;
+      if (ronda > GROOMING_TOPE_REORIENTAR) {
+        mergeGrooming(ROOT, chatId, { ronda });
+        return pausaGrooming(chatId, 'pausa-tope', 'tope de reorientaciones');
+      }
+      mergeGrooming(ROOT, chatId, { estado: 'stevens', ronda, enfoque: dec.nuevoEnfoque || g2.enfoque, decision: null });
+      return avanzarGrooming(chatId);
+    },
+  });
+}
+
+// William aporta tecnología/técnica externa para el frente ya con camino real.
+function lanzarWilliamFrente(chatId, g, repoRoot) {
+  const item = g.item || {};
+  const enfoque = g.enfoque || item.angulo || item.titulo || '';
+  const focoText = 'El frente ya tiene un camino real: "' + (enfoque || item.titulo) + '". Mira HACIA FUERA: '
+    + 'qué tecnología, técnica o herramienta del mercado ayudaría a construir ESTO concreto (o avisa si '
+    + 'lo mejor es no traer nada externo). Escueto y al grano.';
+  launchHeadless({
+    chatId, cwd: repoRoot,
+    prompt: williamChallengePrompt({ threadText: buildThreadText(chatId), focoText, voz: vozDe('william'), puedeLeer: puedeLeerCodigo('william') }),
+    allowedTools: 'WebSearch,mcp__forge__contestar',
+    extraEnv: { FORGE_AUTHOR: 'william', FORGE_MSG_TYPE: 'charla', FORGE_INTENT: 'answer', FORGE_REPLY_TO: String(ultimoDe(chatId, 'iris') || '') },
+    onDone: ({ failed }) => {
+      if (failed) return pausaGrooming(chatId, 'pausa-error', 'William falló');
+      mergeGrooming(ROOT, chatId, { estado: 'aube' });
+      avanzarGrooming(chatId);
+    },
+  });
+}
+
+// Aubé baja el frente a un PLAN (mensaje vivo + proponer_plan). Al terminar, pausa para
+// que Tie cree la tarea a mano y revise. (No hay tareaId aún: solo propone.)
+function lanzarAubeGrooming(chatId, repoRoot) {
+  let live;
+  try { live = appendMessage(ROOT, chatId, { type: 'tarea', author: 'aube', intent: 'answer', replyTo: ultimoDe(chatId, 'william'), text: '✦ Aubé está planteando la tarea…' }); }
+  catch (e) { return pausaGrooming(chatId, 'pausa-tarea', 'no pude crear el mensaje de Aubé: ' + e.message); }
+  try { setMessageLive(ROOT, chatId, live.id, true); } catch {}
+  launchHeadless({
+    chatId, cwd: repoRoot,
+    prompt: aubePrompt({ threadText: buildThreadText(chatId), voz: vozDe('aube') }),
+    liveMsgId: live.id,
+    extraEnv: { FORGE_REPLACE_MSG_ID: String(live.id), FORGE_MSG_TYPE: 'tarea', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'aube' },
+    onDone: () => { pausaGrooming(chatId, 'pausa-tarea', 'Aubé propuso plan; espera crear tarea'); },
+  });
+}
+
+// Iris opina sobre la tecnología de William (encaje con el producto/ciclo). Luego pausa.
+function irisTechPrompt(g) {
+  const item = g.item || {};
+  return [
+    'Eres Iris, la CTO de Neblla. Arriba, William propuso una tecnología/técnica externa',
+    '("' + (item.titulo || 'sin título') + '") y, debajo, Stevens auditó si ya se usa o encaja en el código.',
+    '',
+    'Da tu lectura BREVE: ¿merece la pena para este ciclo? ¿encaja con cómo está montado el producto,',
+    'lo acelera, o descoloca algo? Aterrízalo a la realidad del proyecto (puedes mirar el backbone).',
+    'Cierra con una recomendación clara (adoptar / probar / dejar pasar) para que Tie decida.',
+    '',
+    'Tu única forma de escribir es `contestar`. En cuanto publiques, termina.',
+  ].join('\n');
+}
+function lanzarIrisTech(chatId, g, repoRoot) {
+  launchHeadless({
+    chatId, cwd: repoRoot,
+    prompt: irisTechPrompt(g),
+    allowedTools: 'mcp__forge__backbone_resumen,mcp__forge__backbone_completo,mcp__forge__leer_feature,mcp__forge__contestar',
+    extraEnv: { FORGE_AUTHOR: 'iris', FORGE_MSG_TYPE: 'charla', FORGE_INTENT: 'answer', FORGE_REPLY_TO: String(ultimoDe(chatId, 'stevens') || '') },
+    onDone: ({ failed }) => {
+      if (failed) return pausaGrooming(chatId, 'pausa-error', 'Iris (tech) falló');
+      pausaGrooming(chatId, 'pausa-tie', 'tech revisada; tu turno');
+    },
+  });
+}
+
+// El despachador: mira el estado de grooming de la conversación y lanza el paso que toca.
+function avanzarGrooming(chatId) {
+  const g = readGrooming(ROOT, chatId);
+  if (!g || !g.estado) return;
+  const repoRoot = targetRoot();
+  switch (g.estado) {
+    case 'stevens':     return lanzarStevensGrooming(chatId, g, repoRoot);
+    case 'iris-decide': return lanzarIrisDecide(chatId, g, repoRoot);
+    case 'william':     return lanzarWilliamFrente(chatId, g, repoRoot);
+    case 'aube':        return lanzarAubeGrooming(chatId, repoRoot);
+    case 'iris-tech':   return lanzarIrisTech(chatId, g, repoRoot);
+    default:            return;   // archivado / pausa-* → estado terminal, nada que lanzar
+  }
+}
+
+// Arranca el grooming de una conversación recién abierta (tras el opener). El primer
+// paso siempre es Stevens (audita el frente / la tecnología).
+function iniciarGrooming(chatId, tipo, item) {
+  const enfoque = tipo === 'tech' ? (item.porque || item.titulo || '') : (item.angulo || item.titulo || '');
+  try { mergeGrooming(ROOT, chatId, { tipo, estado: 'stevens', ronda: 0, item, enfoque }); }
+  catch (e) { console.error('[forge] no pude iniciar grooming:', e.message); return; }
+  avanzarGrooming(chatId);
 }
 
 function arrancarAnalisisCiclo(keepChatId) {
@@ -2767,8 +2962,8 @@ function arrancarAnalisisCiclo(keepChatId) {
             chatId: chat.id, cwd: repoRoot,
             prompt: frenteOpenerPrompt(tgt, f, convText),
             extraEnv: { FORGE_AUTHOR: 'iris', FORGE_MSG_TYPE: 'frente', FORGE_INTENT: 'opener' },
-            // tras la apertura, Stevens audita: ¿el código real contradice este frente?
-            onDone: ({ reported }) => { if (reported) lanzarStevensVeredicto(chat.id, 'frente', f, repoRoot); },
+            // tras la apertura, arranca el grooming del frente (Stevens → Iris decide → …).
+            onDone: ({ reported }) => { if (reported) iniciarGrooming(chat.id, 'frente', f); },
           });
         } catch (e) { console.error('[forge] no pude abrir el frente:', e.message); }
       }
@@ -2794,8 +2989,8 @@ function arrancarAnalisisCiclo(keepChatId) {
             chatId: chat.id, cwd: repoRoot,
             prompt: techOpenerPrompt(tgt, s, convText),
             extraEnv: { FORGE_AUTHOR: 'william', FORGE_MSG_TYPE: 'tech', FORGE_INTENT: 'opener' },
-            // tras la apertura, Stevens audita: ¿el código real contradice esta tecnología?
-            onDone: ({ reported }) => { if (reported) lanzarStevensVeredicto(chat.id, 'tech', s, repoRoot); },
+            // tras la apertura, arranca el grooming de la tech (Stevens → Iris → ⏸ tu turno).
+            onDone: ({ reported }) => { if (reported) iniciarGrooming(chat.id, 'tech', s); },
           });
         } catch (e) { console.error('[forge] no pude abrir la conversación de tecnología:', e.message); }
       }
