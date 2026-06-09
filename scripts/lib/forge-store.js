@@ -181,7 +181,7 @@ export function listChats(root) {
       try {
         const c = JSON.parse(fs.readFileSync(path.join(chatsDir(root), f), 'utf8'));
         return { id: c.id, num: c.num, type: c.type, title: c.title, createdAt: c.createdAt,
-          archived: !!c.archived, grooming: c.grooming ? { estado: c.grooming.estado, tipo: c.grooming.tipo } : null };
+          archived: !!c.archived, grooming: c.grooming ? { estado: c.grooming.estado, tipo: c.grooming.tipo, roto: c.grooming.roto || null } : null };
       } catch { return null; }
     })
     .filter(Boolean)

@@ -1454,7 +1454,41 @@ app.get('/api/chats/:id', (req, res) => {
   // `next` = el paso recomendado de la conversación (determinista, lo decide la
   // forja): el botón "Siguiente paso" del front lo dispara. Lo mismo que `t.next`
   // hace por una tarea, pero para la mitad de conversación (William→Iris→Aubé→aprobar).
-  res.json({ ...chat, next: pasoConversacion(chat) });
+  // groomingEnCurso: ¿hay un paso del flujo automático trabajando AHORA en este hilo?
+  // El front lo usa para mostrar "Reanudar flujo" solo cuando está parado de verdad.
+  res.json({ ...chat, next: pasoConversacion(chat), groomingEnCurso: groomingActivo.has(req.params.id) });
+});
+
+// Reanuda el flujo automático de una conversación que se CORTÓ (la máquina se apagó, se
+// acabaron los tokens, un bug a medias). Solo aplica a pasos EN MARCHA (no a las pausas
+// legítimas ni a las archivadas): lo retoma desde el estado donde quedó.
+const GROOMING_ENMARCHA = ['stevens', 'iris-decide', 'william', 'aube', 'iris-tech'];
+app.post('/api/chats/:id/grooming/reanudar', (req, res) => {
+  const id = req.params.id;
+  const chat = readChat(ROOT, id);
+  if (!chat) return res.status(404).json({ error: 'conversación no encontrada' });
+  const g = chat.grooming;
+  if (!g || !g.estado) return res.status(400).json({ error: 'esta conversación no tiene flujo automático' });
+  if (!GROOMING_ENMARCHA.includes(g.estado)) {
+    return res.status(409).json({ error: 'no hay nada que reanudar: es una pausa que espera tu acción (o está archivada).', estado: g.estado });
+  }
+  if (groomingActivo.has(id)) {
+    return res.status(409).json({ error: 'el flujo está trabajando ahora mismo; espera a que termine.', busy: true });
+  }
+  try { mergeGrooming(ROOT, id, { roto: null }); avanzarGrooming(id); }
+  catch (e) { return res.status(500).json({ error: 'no pude reanudar: ' + e.message }); }
+  res.status(202).json({ resumed: true, estado: g.estado });
+});
+
+// Archivar / desarchivar una conversación a mano. Va al cajón "Archivadas" del carril;
+// NO borra nada (se puede sacar). body {archivar:false} para desarchivar.
+app.post('/api/chats/:id/archivar', (req, res) => {
+  const id = req.params.id;
+  if (!readChat(ROOT, id)) return res.status(404).json({ error: 'conversación no encontrada' });
+  const val = !(req.body && req.body.archivar === false);
+  try { markArchived(ROOT, id, val); }
+  catch (e) { return res.status(500).json({ error: 'no se pudo archivar: ' + e.message }); }
+  res.json({ archived: val });
 });
 
 // Detalle del coste de un run (lo que pide el modal al pinchar la chapa $): el
@@ -2731,6 +2765,13 @@ function crearRamaCiclo(repoRoot, palabras) {
 // El estado vive en chat.grooming (forge-store); el avance lo conduce cada `onDone`.
 const GROOMING_TOPE_REORIENTAR = 3;
 
+// Conversaciones con un PASO de grooming en vuelo AHORA MISMO. Sirve para (1) no
+// lanzar dos pasos a la vez sobre la misma conversación y (2) que "Reanudar flujo"
+// sepa si está parado de verdad o trabajando. Cada lanzador la pone; cada onDone la
+// quita al entrar. Si la máquina se apaga, el set se vacía y la conversación queda
+// "rota" (estado en-marcha sin nadie corriendo) → el botón Reanudar la retoma.
+const groomingActivo = new Set();
+
 // El último mensaje de un autor en el hilo (para colgar la réplica del agente).
 function ultimoDe(chatId, autor) {
   try {
@@ -2741,8 +2782,16 @@ function ultimoDe(chatId, autor) {
 
 // Deja la conversación en una PAUSA (estado terminal hasta que Tie actúe). No lanza nada.
 function pausaGrooming(chatId, estado, motivo) {
-  try { mergeGrooming(ROOT, chatId, { estado }); } catch {}
+  try { mergeGrooming(ROOT, chatId, { estado, roto: null }); } catch {}
   if (motivo) console.log(`[forge] grooming ${chatId}: ${estado} — ${motivo}`);
+}
+
+// El paso se ROMPIÓ (un agente falló: sin tokens, error, etc.). CONSERVA el estado
+// en-marcha (para reintentarlo) y marca `roto` con el motivo. El botón "Reanudar
+// flujo" lo retoma desde ese mismo estado.
+function marcarRoto(chatId, motivo) {
+  try { mergeGrooming(ROOT, chatId, { roto: motivo || 'el flujo se cortó' }); } catch {}
+  console.log(`[forge] grooming ${chatId}: ROTO — ${motivo}`);
 }
 
 // Stevens audita el FOCO actual: en un frente, ¿el código lo contradice / qué falta?;
@@ -2764,12 +2813,14 @@ function lanzarStevensGrooming(chatId, g, repoRoot) {
       ].join('\n');
   const steer = 'Revisión RÁPIDA. Distingue lo construido de lo que falta; si algo ya está hecho '
     + 'dilo claro (con fichero y sitio). Directo y frío, sin adornos.';
+  groomingActivo.add(chatId);
   launchHeadless({
     chatId, cwd: repoRoot,
     prompt: stevensPrompt({ threadText: buildThreadText(chatId), focoText, steer, target: targetDesc(), voz: vozDe('stevens'), puedeLeer: puedeLeerCodigo('stevens') }),
     extraEnv: { FORGE_AUTHOR: 'stevens', FORGE_MSG_TYPE: 'investigacion', FORGE_INTENT: 'answer', FORGE_REPLY_TO: '' },
     onDone: ({ failed, reported }) => {
-      if (failed || !reported) return pausaGrooming(chatId, 'pausa-error', 'Stevens no entregó');
+      groomingActivo.delete(chatId);
+      if (failed || !reported) return marcarRoto(chatId, 'Stevens no entregó');
       mergeGrooming(ROOT, chatId, { estado: g.tipo === 'tech' ? 'iris-tech' : 'iris-decide' });
       avanzarGrooming(chatId);
     },
@@ -2810,13 +2861,15 @@ function irisDecidePrompt(g) {
 }
 function lanzarIrisDecide(chatId, g, repoRoot) {
   mergeGrooming(ROOT, chatId, { decision: null });   // limpia una decisión vieja
+  groomingActivo.add(chatId);
   launchHeadless({
     chatId, cwd: repoRoot,
     prompt: irisDecidePrompt(g),
     allowedTools: 'mcp__forge__backbone_resumen,mcp__forge__backbone_completo,mcp__forge__leer_feature,mcp__forge__contestar,mcp__forge__decidir_frente',
     extraEnv: { FORGE_AUTHOR: 'iris', FORGE_MSG_TYPE: 'charla', FORGE_INTENT: 'answer', FORGE_REPLY_TO: String(ultimoDe(chatId, 'stevens') || '') },
     onDone: ({ failed }) => {
-      if (failed) return pausaGrooming(chatId, 'pausa-error', 'Iris falló decidiendo');
+      groomingActivo.delete(chatId);
+      if (failed) return marcarRoto(chatId, 'Iris falló decidiendo');
       const g2 = readGrooming(ROOT, chatId) || {};
       const dec = g2.decision;
       if (!dec || !dec.accion) return pausaGrooming(chatId, 'pausa-opinion', 'Iris no registró decisión');
@@ -2850,13 +2903,15 @@ function lanzarWilliamFrente(chatId, g, repoRoot) {
   const focoText = 'El frente ya tiene un camino real: "' + (enfoque || item.titulo) + '". Mira HACIA FUERA: '
     + 'qué tecnología, técnica o herramienta del mercado ayudaría a construir ESTO concreto (o avisa si '
     + 'lo mejor es no traer nada externo). Escueto y al grano.';
+  groomingActivo.add(chatId);
   launchHeadless({
     chatId, cwd: repoRoot,
     prompt: williamChallengePrompt({ threadText: buildThreadText(chatId), focoText, voz: vozDe('william'), puedeLeer: puedeLeerCodigo('william') }),
     allowedTools: 'WebSearch,mcp__forge__contestar',
     extraEnv: { FORGE_AUTHOR: 'william', FORGE_MSG_TYPE: 'charla', FORGE_INTENT: 'answer', FORGE_REPLY_TO: String(ultimoDe(chatId, 'iris') || '') },
     onDone: ({ failed }) => {
-      if (failed) return pausaGrooming(chatId, 'pausa-error', 'William falló');
+      groomingActivo.delete(chatId);
+      if (failed) return marcarRoto(chatId, 'William falló');
       mergeGrooming(ROOT, chatId, { estado: 'aube' });
       avanzarGrooming(chatId);
     },
@@ -2870,12 +2925,17 @@ function lanzarAubeGrooming(chatId, repoRoot) {
   try { live = appendMessage(ROOT, chatId, { type: 'tarea', author: 'aube', intent: 'answer', replyTo: ultimoDe(chatId, 'william'), text: '✦ Aubé está planteando la tarea…' }); }
   catch (e) { return pausaGrooming(chatId, 'pausa-tarea', 'no pude crear el mensaje de Aubé: ' + e.message); }
   try { setMessageLive(ROOT, chatId, live.id, true); } catch {}
+  groomingActivo.add(chatId);
   launchHeadless({
     chatId, cwd: repoRoot,
     prompt: aubePrompt({ threadText: buildThreadText(chatId), voz: vozDe('aube') }),
     liveMsgId: live.id,
     extraEnv: { FORGE_REPLACE_MSG_ID: String(live.id), FORGE_MSG_TYPE: 'tarea', FORGE_INTENT: 'answer', FORGE_AUTHOR: 'aube' },
-    onDone: () => { pausaGrooming(chatId, 'pausa-tarea', 'Aubé propuso plan; espera crear tarea'); },
+    onDone: ({ failed }) => {
+      groomingActivo.delete(chatId);
+      if (failed) return marcarRoto(chatId, 'Aubé falló al planificar');
+      pausaGrooming(chatId, 'pausa-tarea', 'Aubé propuso plan; espera crear tarea');
+    },
   });
 }
 
@@ -2894,13 +2954,15 @@ function irisTechPrompt(g) {
   ].join('\n');
 }
 function lanzarIrisTech(chatId, g, repoRoot) {
+  groomingActivo.add(chatId);
   launchHeadless({
     chatId, cwd: repoRoot,
     prompt: irisTechPrompt(g),
     allowedTools: 'mcp__forge__backbone_resumen,mcp__forge__backbone_completo,mcp__forge__leer_feature,mcp__forge__contestar',
     extraEnv: { FORGE_AUTHOR: 'iris', FORGE_MSG_TYPE: 'charla', FORGE_INTENT: 'answer', FORGE_REPLY_TO: String(ultimoDe(chatId, 'stevens') || '') },
     onDone: ({ failed }) => {
-      if (failed) return pausaGrooming(chatId, 'pausa-error', 'Iris (tech) falló');
+      groomingActivo.delete(chatId);
+      if (failed) return marcarRoto(chatId, 'Iris (tech) falló');
       pausaGrooming(chatId, 'pausa-tie', 'tech revisada; tu turno');
     },
   });
@@ -2908,6 +2970,7 @@ function lanzarIrisTech(chatId, g, repoRoot) {
 
 // El despachador: mira el estado de grooming de la conversación y lanza el paso que toca.
 function avanzarGrooming(chatId) {
+  if (groomingActivo.has(chatId)) return;   // ya hay un paso en vuelo: no encadenes dos
   const g = readGrooming(ROOT, chatId);
   if (!g || !g.estado) return;
   const repoRoot = targetRoot();

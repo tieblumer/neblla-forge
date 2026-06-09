@@ -269,6 +269,16 @@
   }
   .chat-item:hover .chat-del, .chat-item.active .chat-del { opacity: 1; }
   .chat-del:hover { color: #ff6b6b; border-color: #ff6b6b; }
+  /* botón de archivar/desarchivar (como el de borrar: oculto hasta el hover) */
+  .chat-arch {
+    flex: 0 0 auto; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+    background: transparent; color: var(--muted); border: 1px solid transparent;
+    border-radius: 6px; padding: 2px 6px; opacity: 0; transition: opacity .12s ease;
+  }
+  .chat-item:hover .chat-arch, .chat-item.active .chat-arch { opacity: 1; }
+  .chat-arch:hover { color: var(--secondary); border-color: var(--secondary); }
+  /* botón de paso siguiente cuando el flujo se cortó (resalta en rojo) */
+  .nextstep-btn.roto { border-color: #ff6b6b; color: #ff6b6b; }
   .empty { color: var(--muted); padding: 24px 16px; text-align: center; font-size: 13px; }
   /* badge de estado del grooming automático en una conversación (pausa / en marcha) */
   .gr-badge { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700;
@@ -1417,6 +1427,7 @@
   // pausas (esperan algo de ti) destacan; los pasos en marcha llevan un ⏳ discreto.
   function groomingBadge(g) {
     if (!g || !g.estado) return null;
+    if (g.roto) return { txt: '⚠ reanudar', cls: 'warn', t: 'El flujo se cortó (' + g.roto + ') — ábrela y pulsa Reanudar' };
     const M = {
       'pausa-opinion': { txt: '⏸ tu opinión', cls: 'wait', t: 'Iris pide tu opinión — responde y el ciclo sigue solo' },
       'pausa-tarea':   { txt: '⏸ crear tarea', cls: 'ready', t: 'Aubé propuso el plan — crea la tarea cuando quieras' },
@@ -1433,17 +1444,42 @@
     const li = document.createElement('li');
     li.className = 'chat-item' + (c.id === active ? ' active' : '') + (c.archived ? ' archivada' : '');
     li.innerHTML = '<div class="row"><div class="body"><div class="title"></div></div>'
+      + '<button class="chat-arch" title="' + (c.archived ? 'Desarchivar' : 'Archivar (al cajón Archivadas; no se borra)') + '">' + (c.archived ? '📤' : '🗃') + '</button>'
       + '<button class="chat-del" title="Borrar conversación (definitivo)">🗑</button></div>';
     li.dataset.chatId = c.id;
     const titleEl = li.querySelector('.title');
     titleEl.textContent = c.title;
     titleEl.title = c.title + '  (#' + c.id + ' · ' + (c.type || '') + ')';
-    const b = groomingBadge(c.grooming);
+    const b = c.archived ? null : groomingBadge(c.grooming);
     if (b) { const el = document.createElement('span'); el.className = 'gr-badge ' + b.cls; el.textContent = b.txt; el.title = b.t; titleEl.appendChild(el); }
     pintarIconosTareas(titleEl, c.id);
     li.querySelector('.body').onclick = () => openChat(c.id);
+    li.querySelector('.chat-arch').onclick = (e) => { e.stopPropagation(); archivarConv(c, !c.archived); };
     li.querySelector('.chat-del').onclick = (e) => { e.stopPropagation(); deleteChat(c); };
     return li;
+  }
+
+  // Archiva / desarchiva una conversación a mano (botón 🗃/📤). Va al cajón
+  // "Archivadas"; no borra nada.
+  async function archivarConv(c, archivar) {
+    try {
+      const res = await fetch('/api/chats/' + c.id + '/archivar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archivar }),
+      });
+      if (!res.ok) { alert('No se pudo archivar.'); return; }
+      loadList();
+    } catch { alert('No se pudo archivar.'); }
+  }
+
+  // Reanuda el flujo automático de una conversación que se cortó.
+  async function reanudarGrooming(id) {
+    try {
+      const res = await fetch('/api/chats/' + id + '/grooming/reanudar', { method: 'POST' });
+      if (res.status === 409 || res.status === 400) { const j = await res.json().catch(() => ({})); alert(j.error || 'No se pudo reanudar.'); return; }
+      if (!res.ok) { alert('No se pudo reanudar.'); return; }
+      lastSig = ''; refreshThread(); loadList(); arrancarPollCiclo();
+    } catch { alert('No se pudo reanudar.'); }
   }
 
   async function loadList() {
@@ -2752,6 +2788,20 @@
     if (!nextStepBarEl) return;
     nextStepBarEl.innerHTML = '';
     if (!active) { nextStepBarEl.style.display = 'none'; return; }
+    // REANUDAR FLUJO: la conversación quedó en un paso automático en marcha pero no hay
+    // nadie corriendo (se cortó: reinicio, tokens, bug). Ofrecemos retomarlo.
+    const g = lastChat && lastChat.grooming;
+    const enMarcha = g && ['stevens', 'iris-decide', 'william', 'aube', 'iris-tech'].includes(g.estado);
+    if (enMarcha && !(lastChat && lastChat.groomingEnCurso)) {
+      const rb = document.createElement('button');
+      rb.className = 'nextstep-btn' + (g.roto ? ' roto' : '');
+      rb.textContent = (g.roto ? '⚠ Flujo cortado — ' : '▶ ') + 'Reanudar flujo automático';
+      rb.title = g.roto ? ('Se cortó: ' + g.roto + '. Lo retoma donde quedó.') : 'El paso quedó a medias (¿reinicio?). Reanúdalo.';
+      rb.onclick = () => reanudarGrooming(active);
+      nextStepBarEl.appendChild(rb);
+      nextStepBarEl.style.display = 'block';
+      return;
+    }
     const b = document.createElement('button');
     b.className = 'nextstep-btn';
     // EN CURSO: el botón se deshabilita; si lo intentas, responde "inténtalo en un minuto".
