@@ -2608,6 +2608,41 @@ function crearRamaCiclo(repoRoot, palabras) {
 // + frentes (1-10 distintos); William → 1-3 tecnologías externas. La estructura
 // (crear la rama, abrir una conversación por frente / por tecnología) la hace el
 // servidor de forma determinista cuando cada analista termina (onDone).
+// Stevens audita en CADA conversación que se abre sola (frente de Iris / tecnología
+// de William): revisión rápida del código real para ver si el estado actual CONTRADICE
+// lo que se propone, y cuelga su veredicto del mensaje de apertura. Voz directa y fría
+// (es su sello: hechos, cero adornos). Reusa su prompt de auditoría con un foco
+// específico. Se llama desde el onDone del opener, solo si el opener llegó a publicar.
+function lanzarStevensVeredicto(chatId, kind, item, repoRoot) {
+  // el opener ya publicó: Stevens cuelga su veredicto de ese mensaje.
+  let parentId = null;
+  try {
+    const autor = kind === 'tech' ? 'william' : 'iris';
+    const suyos = ((readChat(ROOT, chatId)?.messages) || []).filter((m) => m.author === autor);
+    if (suyos.length) parentId = suyos[suyos.length - 1].id;
+  } catch {}
+  const quien = kind === 'tech' ? 'William (una tecnología/herramienta externa)' : 'Iris (un frente por donde atacar)';
+  const detalle = kind === 'tech' ? (item.porque || '') : (item.angulo || '');
+  const focoText = [
+    `Acaba de abrirse esta conversación: ${quien} propone "${item.titulo || 'sin título'}".`,
+    detalle ? 'Lo que se propone: ' + detalle : '',
+    'Tu foco es el ESTADO REAL del código frente a esta propuesta: ¿lo que hay hoy la',
+    'CONTRADICE en algo (ya está implementado de otra forma, asume algo que no se cumple,',
+    'choca con cómo está montado)?',
+  ].filter(Boolean).join('\n');
+  const steer = 'Revisión RÁPIDA del código. Di si el estado actual contradice lo que se '
+    + 'propone aquí: si hay contradicción, señálala con fichero y sitio exactos; si no la hay, '
+    + 'dilo en una línea. Veredicto directo y frío, sin cortesías ni adornos.';
+  launchHeadless({
+    chatId, cwd: repoRoot,
+    prompt: stevensPrompt({
+      threadText: buildThreadText(chatId), focoText, steer,
+      target: targetDesc(), voz: vozDe('stevens'), puedeLeer: puedeLeerCodigo('stevens'),
+    }),
+    extraEnv: { FORGE_AUTHOR: 'stevens', FORGE_MSG_TYPE: 'investigacion', FORGE_INTENT: 'answer', FORGE_REPLY_TO: parentId == null ? '' : String(parentId) },
+  });
+}
+
 function arrancarAnalisisCiclo(keepChatId) {
   const tgt = cycleTarget();
   const repoRoot = tgt === 'project' ? PROJECT_ROOT : FORGE_DIR;
@@ -2640,6 +2675,8 @@ function arrancarAnalisisCiclo(keepChatId) {
             chatId: chat.id, cwd: repoRoot,
             prompt: frenteOpenerPrompt(tgt, f, convText),
             extraEnv: { FORGE_AUTHOR: 'iris', FORGE_MSG_TYPE: 'frente', FORGE_INTENT: 'opener' },
+            // tras la apertura, Stevens audita: ¿el código real contradice este frente?
+            onDone: ({ reported }) => { if (reported) lanzarStevensVeredicto(chat.id, 'frente', f, repoRoot); },
           });
         } catch (e) { console.error('[forge] no pude abrir el frente:', e.message); }
       }
@@ -2665,6 +2702,8 @@ function arrancarAnalisisCiclo(keepChatId) {
             chatId: chat.id, cwd: repoRoot,
             prompt: techOpenerPrompt(tgt, s, convText),
             extraEnv: { FORGE_AUTHOR: 'william', FORGE_MSG_TYPE: 'tech', FORGE_INTENT: 'opener' },
+            // tras la apertura, Stevens audita: ¿el código real contradice esta tecnología?
+            onDone: ({ reported }) => { if (reported) lanzarStevensVeredicto(chat.id, 'tech', s, repoRoot); },
           });
         } catch (e) { console.error('[forge] no pude abrir la conversación de tecnología:', e.message); }
       }
