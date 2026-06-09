@@ -3287,6 +3287,9 @@
 
   function showNuevoCiclo(on) {
     nuevoActive = on;            // estás parado en la parada "Nuevo ciclo"
+    // persistimos la parada: es estado de VISTA (el cursor del backend sigue en Spike),
+    // así que sin esto un refresco te devolvía a Spike. El init lo restaura.
+    try { localStorage.setItem('forge.nuevoCiclo', on ? '1' : '0'); } catch {}
     renderCycle();               // carril + flechas + chip del objetivo editable
     loadList();                  // la lista de la izquierda: solo backlog en Nuevo ciclo
     loadTareas();                // las tareas: vacías en Nuevo ciclo
@@ -3335,6 +3338,7 @@
     if (!res.ok) { alert('No se pudo empezar el ciclo.'); return; }
     const j = await res.json();
     nuevoActive = false;
+    try { localStorage.setItem('forge.nuevoCiclo', '0'); } catch {}   // ya no estás en la parada
     if (j.cycle) { cycle = j.cycle; renderCycle(); } else { loadCycle(); }
     await loadList();
     loadTareas();
@@ -3771,7 +3775,7 @@
 
   // ── arranque ─────────────────────────────────────────────────────────────────
   async function init() {
-    loadCycle();
+    await loadCycle();
     loadUsage();
     setInterval(loadUsage, 4 * 60 * 1000);
     refreshAutostart();
@@ -3779,6 +3783,14 @@
     setInterval(pollForgeStatus, 3000);
     loadTareas();
     updateSelectionUI();
+    // ¿estabas parado en "Nuevo ciclo" antes de refrescar? Es estado de vista (el cursor
+    // del backend sigue en Spike), así que lo restauramos — pero SOLO si seguimos en Spike
+    // (si el ciclo avanzó, el flag está rancio y se descarta).
+    let enGate = false;
+    try { enGate = localStorage.getItem('forge.nuevoCiclo') === '1'; } catch {}
+    const enSpike = !!cycle && (cycle.cursor === 0 || cycle.phase === 'spike');
+    if (enGate && enSpike) { showNuevoCiclo(true); return; }   // restaura la parada + abre el backlog
+    if (enGate && !enSpike) { try { localStorage.setItem('forge.nuevoCiclo', '0'); } catch {} }
     const chats = await loadList();
     if (!chats || !chats.length) {
       try {
