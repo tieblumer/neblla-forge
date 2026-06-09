@@ -32,6 +32,7 @@ import {
   stampMessageCost, setMessageLive, setLiveBeat, setTareaPlan, approveTareaPlan, setTareaSubtareas, setTareaTestsPlan,
   mutateTestsPlan,
   stubMessageForTarea, restoreStubbedMessage, deleteTarea, resolveOrigen,
+  readCyclePlan, clearCyclePlan,
 } from './lib/forge-store.js';
 import * as cycle from './lib/forge-firme.js';
 import { ordenar as ordenarTareas, GRUPOS as TAREA_GRUPOS, pasoConversacion } from './lib/forge-estado.js';
@@ -251,6 +252,111 @@ function backlogOpenerPrompt(target = cycleTarget()) {
     'Tu ÚNICA forma de escribir es la herramienta MCP `contestar` (campo `text`).',
     'En cuanto publiques tu apertura, termina.',
   ].join('\n');
+}
+
+// ── prompts de "Empezar ciclo" ───────────────────────────────────────────────
+// Iris ANALISTA: lee la conversación entera del backlog y decide el arranque del
+// ciclo — la rama (1-3 palabras) y los frentes (1-10, distintos). Pesa el criterio
+// TÉCNICO/constructor por encima de la letra de lo que pidió el CEO (decisión de Tie:
+// "la opinión del programador es la que más cuenta"). No escribe en el chat: su única
+// salida es la herramienta `plan_ciclo` (datos).
+function analisisCicloIrisPrompt(target, convText) {
+  const quien = target === 'project' ? 'Neblla, el PRODUCTO (la carpeta project/)' : 'el FORGE, la propia máquina de construir';
+  return [
+    'Eres Iris, la CTO de Neblla. Tie (el CEO) y tú venís de una charla de backlog y ahora',
+    `ARRANCA un ciclo de trabajo sobre ${quien}.`,
+    '',
+    'Esta es la conversación COMPLETA tal cual:',
+    '--- CONVERSACIÓN ---',
+    convText,
+    '--- FIN CONVERSACIÓN ---',
+    '',
+    'Tu trabajo: leerla entera y decidir QUÉ vamos a hacer este ciclo. Importante: cuando la',
+    'visión técnica y la letra de lo que pidió el CEO no coincidan, MANDA el criterio técnico',
+    '(el del que va a construir) — esa es la opinión que más cuenta. Puedes mirar el código real',
+    '(Read/Grep/Glob) si lo necesitas para decidir con fundamento.',
+    '',
+    'Entrega tu decisión con la herramienta `plan_ciclo`:',
+    '  • `rama`: de 1 a 3 palabras que resuman el OBJETIVO GENERAL del ciclo (será el nombre de la rama git).',
+    '  • `frentes`: de 1 a 10 frentes por donde atacar el problema. Deben ser DISTINTOS y NO redundantes',
+    '    entre sí: cada uno ataca un problema diferente (no diez maneras de decir lo mismo). Pon solo los',
+    '    que de verdad aporten un ángulo propio — si con dos basta, dos. Cada frente: `titulo` + `angulo`.',
+    '',
+    'Tu ÚNICA acción es llamar a `plan_ciclo` una vez. No escribes en ningún chat. En cuanto la llames, termina.',
+  ].join('\n');
+}
+
+// Iris ABRE un frente: una conversación nueva enfocada en UN frente del ciclo. Como
+// el abridor del backlog, escribe el primer mensaje (vía `contestar`) que plantea el
+// frente e invita a trabajarlo.
+function frenteOpenerPrompt(target, frente, convText) {
+  const quien = target === 'project' ? 'Neblla, el PRODUCTO (la carpeta project/)' : 'el FORGE, la máquina de construir';
+  return [
+    'Eres Iris, la CTO de Neblla. Acaba de arrancar un ciclo de trabajo sobre ' + quien + ' y',
+    'tú estás ABRIENDO una conversación dedicada a UNO de los frentes que propusiste. Es tu',
+    'mensaje de apertura del frente (la pizarra de este hilo está limpia).',
+    '',
+    'EL FRENTE:',
+    '  • ' + (frente.titulo || '(sin título)'),
+    frente.angulo ? '  • Ángulo: ' + frente.angulo : '',
+    '',
+    'Para tu contexto, la charla de la que salió el ciclo:',
+    '--- CONVERSACIÓN ---',
+    convText,
+    '--- FIN CONVERSACIÓN ---',
+    '',
+    'Escribe una apertura BREVE y en cristiano: plantea este frente concreto (qué problema',
+    'ataca y por dónde empezar), sin invadir los otros frentes, e invita a Tie a entrar a',
+    'trabajarlo. Cálida y directa, sin jargon ni IDs.',
+    '',
+    'Tu ÚNICA forma de escribir es la herramienta `contestar` (campo `text`). En cuanto publiques, termina.',
+  ].filter(Boolean).join('\n');
+}
+
+// William ANALISTA: mira HACIA FUERA y propone 1-3 tecnologías/técnicas/herramientas
+// externas que convendría conocer para este ciclo. Salida: la herramienta `tech_ciclo`.
+function analisisCicloWilliamPrompt(target, convText) {
+  const quien = target === 'project' ? 'Neblla, el PRODUCTO (la carpeta project/)' : 'el FORGE, la máquina de construir';
+  return [
+    'Eres William, el ingeniero de Neblla que mira HACIA FUERA (el mercado, el estado del arte).',
+    'Acaba de arrancar un ciclo de trabajo sobre ' + quien + '. Esta es la charla de la que sale:',
+    '--- CONVERSACIÓN ---',
+    convText,
+    '--- FIN CONVERSACIÓN ---',
+    '',
+    'Tu trabajo: proponer de 1 a 3 tecnologías, técnicas o herramientas EXTERNAS que vendría',
+    'bien conocer o tener en cuenta para este ciclo. Solo lo que de verdad aporte; si con una',
+    'basta, una. Nada de relleno ni cosas obvias.',
+    '',
+    'Entrega tu propuesta con la herramienta `tech_ciclo`: array `sugerencias`, cada una con',
+    '`titulo` (la tecnología/técnica) y `porque` (qué aportaría a este ciclo).',
+    '',
+    'Tu ÚNICA acción es llamar a `tech_ciclo` una vez. No escribes en ningún chat. En cuanto la llames, termina.',
+  ].join('\n');
+}
+
+// William ABRE una conversación sobre UNA tecnología sugerida.
+function techOpenerPrompt(target, sug, convText) {
+  const quien = target === 'project' ? 'Neblla, el PRODUCTO (la carpeta project/)' : 'el FORGE, la máquina de construir';
+  return [
+    'Eres William, el ingeniero de Neblla que mira hacia fuera. Acaba de arrancar un ciclo sobre',
+    quien + ' y estás ABRIENDO una conversación sobre UNA tecnología/técnica/herramienta externa',
+    'que propusiste tener en cuenta. Es tu mensaje de apertura de este hilo.',
+    '',
+    'LA TECNOLOGÍA:',
+    '  • ' + (sug.titulo || '(sin título)'),
+    sug.porque ? '  • Por qué: ' + sug.porque : '',
+    '',
+    'Para tu contexto, la charla de la que salió el ciclo:',
+    '--- CONVERSACIÓN ---',
+    convText,
+    '--- FIN CONVERSACIÓN ---',
+    '',
+    'Escribe una apertura BREVE y concreta: qué es, por qué encaja en este ciclo y qué habría',
+    'que mirar o probar de ella. Sin humo. Invita a Tie a opinar si vale la pena.',
+    '',
+    'Tu ÚNICA forma de escribir es la herramienta `contestar` (campo `text`). En cuanto publiques, termina.',
+  ].filter(Boolean).join('\n');
 }
 
 // El subárbol (rama) que cuelga de un mensaje, él incluido, como texto.
@@ -2465,10 +2571,113 @@ app.post('/api/cycle/backlog', (req, res) => {
   res.status(201).json({ chat: createBacklogChat(target), spawned: true });
 });
 
-// "Empezar" = la flecha ▶ desde "Nuevo ciclo". Exige el repo del OBJETIVO limpio,
-// borra el taller (todas las tareas y conversaciones SALVO la de backlog del objetivo
-// elegido) y arranca: cursor en Spike (0), sin pausa. El objetivo ya se fijó en la
-// parada (chip de arriba-izquierda → POST /api/cycle/target).
+// ── rama git del ciclo ───────────────────────────────────────────────────────
+// La rama la bautiza Iris (1-3 palabras del objetivo); aquí la convertimos en un
+// nombre seguro para git y creamos+entramos en ella (checkout -b) sobre el repo del
+// objetivo, que ya exigimos limpio antes de empezar.
+const ACENTOS_RE = new RegExp('[\\u0300-\\u036f]', 'g');   // marcas diacríticas combinantes (NFD)
+function slugRama(palabras) {
+  const limpio = String(palabras || '')
+    .normalize('NFD').replace(ACENTOS_RE, '')   // fuera acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')                       // solo alfanum/espacio/guion
+    .trim()
+    .split(/[\s-]+/).filter(Boolean)
+    .slice(0, 3)                                         // de 1 a 3 palabras
+    .join('-');
+  return limpio || 'ciclo';
+}
+function ramaExiste(repoRoot, name) {
+  const r = spawnSync('git', ['-C', repoRoot, 'rev-parse', '--verify', '--quiet', 'refs/heads/' + name], { encoding: 'utf8' });
+  return r.status === 0;
+}
+function crearRamaCiclo(repoRoot, palabras) {
+  const base = slugRama(palabras);
+  let name = base, n = 2;
+  while (ramaExiste(repoRoot, name)) { name = base + '-' + n; if (++n > 50) break; }
+  const r = spawnSync('git', ['-C', repoRoot, 'checkout', '-b', name], { encoding: 'utf8' });
+  if (r.status !== 0) {
+    console.error('[forge] no pude crear la rama del ciclo:', (r.stderr || '').trim());
+    return null;
+  }
+  return name;
+}
+
+// El ARRANQUE del ciclo (parte creativa, asíncrona): dos analistas headless leen la
+// conversación del backlog y deciden por dónde va el ciclo. Iris → rama (1-3 palabras)
+// + frentes (1-10 distintos); William → 1-3 tecnologías externas. La estructura
+// (crear la rama, abrir una conversación por frente / por tecnología) la hace el
+// servidor de forma determinista cuando cada analista termina (onDone).
+function arrancarAnalisisCiclo(keepChatId) {
+  const tgt = cycleTarget();
+  const repoRoot = tgt === 'project' ? PROJECT_ROOT : FORGE_DIR;
+  const convText = buildThreadText(keepChatId);   // la charla del backlog (sobrevive al wipe)
+  clearCyclePlan(ROOT, 'plan');
+  clearCyclePlan(ROOT, 'tech');
+
+  // 1) Iris analista → rama + frentes. Al salir: crea la rama y abre un frente por conversación.
+  launchHeadless({
+    chatId: keepChatId,
+    cwd: repoRoot,
+    timeoutMs: 10 * 60 * 1000,
+    prompt: analisisCicloIrisPrompt(tgt, convText),
+    allowedTools: 'Read,Grep,Glob,mcp__forge__plan_ciclo',
+    extraEnv: { FORGE_AUTHOR: 'iris', FORGE_MSG_TYPE: 'frente' },
+    onDone: () => {
+      const plan = readCyclePlan(ROOT, 'plan');
+      clearCyclePlan(ROOT, 'plan');
+      if (!plan || !plan.rama) { console.log('[forge] empezar: Iris no dejó plan de ciclo.'); return; }
+      const rama = crearRamaCiclo(repoRoot, plan.rama);
+      if (rama) {
+        try { writeCycle(ROOT, cycle.setBranch(loadCycle(), rama)); }
+        catch (e) { console.error('[forge] no pude guardar la rama del ciclo:', e.message); }
+        console.log(`[forge] ciclo: rama "${rama}" creada en ${repoRoot}.`);
+      }
+      for (const f of (plan.frentes || [])) {
+        try {
+          const chat = createChat(ROOT, { type: 'frente', title: 'frente · ' + (f.titulo || 'sin título'), target: tgt });
+          launchHeadless({
+            chatId: chat.id, cwd: repoRoot,
+            prompt: frenteOpenerPrompt(tgt, f, convText),
+            extraEnv: { FORGE_AUTHOR: 'iris', FORGE_MSG_TYPE: 'frente', FORGE_INTENT: 'opener' },
+          });
+        } catch (e) { console.error('[forge] no pude abrir el frente:', e.message); }
+      }
+    },
+  });
+
+  // 2) William analista → 1-3 tecnologías externas. Al salir: una conversación por sugerencia.
+  launchHeadless({
+    chatId: keepChatId,
+    cwd: repoRoot,
+    timeoutMs: 10 * 60 * 1000,
+    prompt: analisisCicloWilliamPrompt(tgt, convText),
+    allowedTools: 'Read,Grep,Glob,WebSearch,mcp__forge__tech_ciclo',
+    extraEnv: { FORGE_AUTHOR: 'william', FORGE_MSG_TYPE: 'tech' },
+    onDone: () => {
+      const tech = readCyclePlan(ROOT, 'tech');
+      clearCyclePlan(ROOT, 'tech');
+      if (!tech || !Array.isArray(tech.sugerencias) || !tech.sugerencias.length) { console.log('[forge] empezar: William no dejó tecnologías.'); return; }
+      for (const s of tech.sugerencias) {
+        try {
+          const chat = createChat(ROOT, { type: 'tech', title: 'tech · ' + (s.titulo || 'sin título'), target: tgt });
+          launchHeadless({
+            chatId: chat.id, cwd: repoRoot,
+            prompt: techOpenerPrompt(tgt, s, convText),
+            extraEnv: { FORGE_AUTHOR: 'william', FORGE_MSG_TYPE: 'tech', FORGE_INTENT: 'opener' },
+          });
+        } catch (e) { console.error('[forge] no pude abrir la conversación de tecnología:', e.message); }
+      }
+    },
+  });
+}
+
+// "Empezar ciclo" = el botón (y la flecha ▶) desde "Nuevo ciclo". Exige el repo del
+// OBJETIVO limpio, borra el taller (todas las tareas y conversaciones SALVO la de
+// backlog del objetivo elegido) y ARRANCA: cursor en Spike (0), sin pausa, rama
+// limpia. Luego dispara —en segundo plano— los dos analistas (Iris: rama + frentes;
+// William: tecnologías externas), que abren las conversaciones del ciclo a medida que
+// deciden. El objetivo ya se fijó en la parada (POST /api/cycle/target).
 app.post('/api/cycle/empezar', (_req, res) => {
   const tgt = cycleTarget();
   const tgtRoot = tgt === 'project' ? PROJECT_ROOT : FORGE_DIR;
@@ -2488,7 +2697,11 @@ app.post('/api/cycle/empezar', (_req, res) => {
   let spawned = false;
   if (!keep) { keep = createBacklogChat(tgt); spawned = true; }
   wipeWorkshop(keep.id);
-  writeCycle(ROOT, cycle.normalize({ ...loadCycle(), cursor: 0, paused: false }));
+  // cursor en Spike, sin pausa, y la rama a null (la pondrá Iris al decidir el nombre).
+  writeCycle(ROOT, cycle.setBranch(cycle.normalize({ ...loadCycle(), cursor: 0, paused: false }), null));
+  // el análisis (rama + frentes + tecnologías) corre en segundo plano: respondemos ya.
+  try { arrancarAnalisisCiclo(keep.id); }
+  catch (e) { console.error('[forge] no pude arrancar el análisis del ciclo:', e.message); }
   res.status(200).json({ chat: keep, spawned, cycle: cycle.publicState(loadCycle()) });
 });
 

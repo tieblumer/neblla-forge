@@ -47,6 +47,31 @@ export function writeCycle(root, state) {
   return state;
 }
 
+// ── scratch del ANÁLISIS de arranque del ciclo ───────────────────────────────
+// "Empezar ciclo" lanza dos analistas headless (Iris → rama + frentes; William →
+// tecnologías externas). Su criterio (datos puros) lo graban vía MCP en estos
+// sidecars, y el servidor (determinista) los consume al salir el analista: crea la
+// rama, abre una conversación por frente y otra por sugerencia. `kind` = 'plan'
+// (Iris) | 'tech' (William). Efímero: se borra al empezar y tras consumirse.
+export function cyclePlanPath(root, kind) {
+  const safe = kind === 'tech' ? 'tech' : 'plan';
+  return path.join(root, 'forge', 'sprint', `cycle-${safe}.json`);
+}
+
+export function readCyclePlan(root, kind) {
+  try { return JSON.parse(fs.readFileSync(cyclePlanPath(root, kind), 'utf8')); }
+  catch { return null; }
+}
+
+export function writeCyclePlan(root, kind, data) {
+  atomicWrite(cyclePlanPath(root, kind), JSON.stringify(data, null, 2) + '\n');
+  return data;
+}
+
+export function clearCyclePlan(root, kind) {
+  try { fs.unlinkSync(cyclePlanPath(root, kind)); } catch {}
+}
+
 // ── modelo global de los headless ────────────────────────────────────────────
 // Un sidecar sprint/model.json guarda {model: <alias>}; persiste a reinicios. La
 // elección la pone el selector de la UI y vale para TODOS los personajes. Vacío o

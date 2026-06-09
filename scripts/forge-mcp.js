@@ -18,7 +18,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
-import { appendMessage, replaceMessageText, readChat, readTarea, mutateTestsPlan, setTareaPlan, setMessagePlan } from './lib/forge-store.js';
+import { appendMessage, replaceMessageText, readChat, readTarea, mutateTestsPlan, setTareaPlan, setMessagePlan, writeCyclePlan } from './lib/forge-store.js';
 import { normalizarTestsPlan, fusionarTests, normalizarEstadoTest, ensamblarTestFile, aplicarResultadosCorrida } from './lib/forge-tests.js';
 import { normalizarPlan, renderPlanTexto, COMPLEJIDADES } from './lib/forge-plan.js';
 
@@ -207,7 +207,66 @@ const PROPONER_PLAN_TOOL = {
   },
 };
 
-const TOOLS = [TOOL, PREGUNTAR_TOOL, BACKBONE_RESUMEN_TOOL, BACKBONE_COMPLETO_TOOL, LEER_FEATURE_TOOL, DEFINIR_TESTS_TOOL, ESCRIBIR_TEST_TOOL, CORRER_TESTS_TOOL, PROPONER_PLAN_TOOL];
+// ── arranque del ciclo (Iris analista / William analista) ─────────────────────
+// Las usan los DOS analistas que dispara "Empezar ciclo". No escriben en ningún
+// chat: entregan su criterio como DATOS y el servidor (determinista) hace el resto
+// (crea la rama, abre una conversación por frente / por sugerencia).
+const PLAN_CICLO_TOOL = {
+  name: 'plan_ciclo',
+  description: 'ARRANCA el ciclo (eres Iris). Tras leer la conversación entera, entrega como DATOS: '
+    + '(1) `rama` = de 1 a 3 palabras que resuman el objetivo general del ciclo (será el nombre de la '
+    + 'rama git), y (2) `frentes` = de 1 a 10 frentes DISTINTOS por donde atacar el problema, NO '
+    + 'redundantes entre sí (cada uno ataca un problema diferente). El servidor crea la rama y abre una '
+    + 'conversación por frente. Llámala UNA sola vez; con eso terminas.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      rama: { type: 'string', description: 'De 1 a 3 palabras que resumen el objetivo del ciclo (p.ej. "amigos cross-app").' },
+      frentes: {
+        type: 'array',
+        description: 'De 1 a 10 frentes distintos, no redundantes, cada uno atacando un problema diferente.',
+        items: {
+          type: 'object',
+          properties: {
+            titulo: { type: 'string', description: 'Título corto del frente (qué ataca).' },
+            angulo: { type: 'string', description: 'El ángulo concreto: por qué este frente, qué problema toca y por dónde empezar.' },
+          },
+          required: ['titulo'],
+        },
+      },
+    },
+    required: ['rama', 'frentes'],
+    additionalProperties: false,
+  },
+};
+const TECH_CICLO_TOOL = {
+  name: 'tech_ciclo',
+  description: 'SUGIERE tecnologías para el ciclo (eres William, mirada hacia fuera). Tras leer la '
+    + 'conversación, entrega como DATOS de 1 a 3 `sugerencias` de tecnologías, técnicas o herramientas '
+    + 'externas que vendría bien conocer o tener en cuenta para este ciclo. El servidor abre una '
+    + 'conversación por sugerencia. Llámala UNA sola vez; con eso terminas.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      sugerencias: {
+        type: 'array',
+        description: 'De 1 a 3 tecnologías/técnicas/herramientas externas relevantes para este ciclo.',
+        items: {
+          type: 'object',
+          properties: {
+            titulo: { type: 'string', description: 'Nombre de la tecnología/técnica/herramienta.' },
+            porque: { type: 'string', description: 'Por qué encaja en este ciclo y qué aportaría.' },
+          },
+          required: ['titulo'],
+        },
+      },
+    },
+    required: ['sugerencias'],
+    additionalProperties: false,
+  },
+};
+
+const TOOLS = [TOOL, PREGUNTAR_TOOL, BACKBONE_RESUMEN_TOOL, BACKBONE_COMPLETO_TOOL, LEER_FEATURE_TOOL, DEFINIR_TESTS_TOOL, ESCRIBIR_TEST_TOOL, CORRER_TESTS_TOOL, PROPONER_PLAN_TOOL, PLAN_CICLO_TOOL, TECH_CICLO_TOOL];
 
 // La tarea de este hilo (CHAT_ID → chat.tareaId → tarea). null si el hilo no es de tarea.
 function tareaDelHilo() {
@@ -271,6 +330,41 @@ function handleProponerPlan(id, args) {
   }
   reply(id, { content: [{ type: 'text', text: `Plan guardado (complejidad: ${plan.complejidad}, ${plan.partes.length} parte(s)). El forge ya renderizó tu mensaje; con esto has terminado.` }] });
 }
+// Iris analista: graba {rama, frentes} en el scratch. El servidor lo consume al
+// salir el headless (crea la rama + abre una conversación por frente).
+function handlePlanCiclo(id, args) {
+  const rama = String(args && args.rama != null ? args.rama : '').trim();
+  const frentesIn = Array.isArray(args && args.frentes) ? args.frentes : [];
+  if (!rama) return reply(id, { isError: true, content: [{ type: 'text', text: 'Falta `rama` (1-3 palabras que resuman el objetivo del ciclo).' }] });
+  const frentes = frentesIn
+    .map((f) => ({ titulo: String((f && f.titulo) || '').trim(), angulo: String((f && f.angulo) || '').trim() }))
+    .filter((f) => f.titulo)
+    .slice(0, 10);
+  if (!frentes.length) return reply(id, { isError: true, content: [{ type: 'text', text: 'Hace falta al menos un frente (con `titulo`).' }] });
+  try {
+    writeCyclePlan(ROOT, 'plan', { rama, frentes, at: new Date().toISOString() });
+  } catch (e) {
+    return reply(id, { isError: true, content: [{ type: 'text', text: 'No pude guardar el plan del ciclo: ' + e.message }] });
+  }
+  reply(id, { content: [{ type: 'text', text: `Arranque registrado: rama "${rama}" y ${frentes.length} frente(s). El forge creará la rama y abrirá las conversaciones; con esto has terminado.` }] });
+}
+
+// William analista: graba {sugerencias} en el scratch (1-3 tecnologías externas).
+function handleTechCiclo(id, args) {
+  const sugIn = Array.isArray(args && args.sugerencias) ? args.sugerencias : [];
+  const sugerencias = sugIn
+    .map((s) => ({ titulo: String((s && s.titulo) || '').trim(), porque: String((s && s.porque) || '').trim() }))
+    .filter((s) => s.titulo)
+    .slice(0, 3);
+  if (!sugerencias.length) return reply(id, { isError: true, content: [{ type: 'text', text: 'Hace falta al menos una sugerencia (con `titulo`).' }] });
+  try {
+    writeCyclePlan(ROOT, 'tech', { sugerencias, at: new Date().toISOString() });
+  } catch (e) {
+    return reply(id, { isError: true, content: [{ type: 'text', text: 'No pude guardar las tecnologías del ciclo: ' + e.message }] });
+  }
+  reply(id, { content: [{ type: 'text', text: `Registradas ${sugerencias.length} tecnología(s). El forge abrirá una conversación por cada una; con esto has terminado.` }] });
+}
+
 function handleEscribirTest(id, args) {
   const tarea = tareaDelHilo();
   if (!tarea) return reply(id, { isError: true, content: [{ type: 'text', text: 'Este hilo no es de una tarea.' }] });
@@ -429,6 +523,8 @@ function handle(msg) {
       if (name === 'escribir_test') return handleEscribirTest(id, args);
       if (name === 'correr_tests') return handleCorrerTests(id);
       if (name === 'proponer_plan') return handleProponerPlan(id, args);
+      if (name === 'plan_ciclo') return handlePlanCiclo(id, args);
+      if (name === 'tech_ciclo') return handleTechCiclo(id, args);
       if (name !== 'contestar') {
         return fail(id, -32602, 'herramienta desconocida: ' + name);
       }

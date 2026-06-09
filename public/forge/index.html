@@ -830,6 +830,9 @@
         <button class="tool" id="btnDiscutir" disabled title="Romina o Ariel salta con un lado (al azar); vuelve a pulsar y salta el otro con el lado contrario">🙎‍♂️🙎‍♀️ Discutir</button>
         <button class="tool" id="btnResumir" disabled title="Anselmo resume el hilo (su nota se puede compactar)">📝 Resumir</button>
         <button class="tool" id="btnTarea" disabled title="Aubé baja el hilo a una tarea">❎ Crear tarea</button>
+        <!-- SOLO en "Nuevo ciclo": sustituye a "Crear tarea". Analiza la charla, crea la rama,
+             pasa a Spike y dispara a Iris (frentes) y William (tecnologías externas). -->
+        <button class="tool" id="btnEmpezarCiclo" style="display:none" title="Analiza la conversación, crea la rama del ciclo, pasa a Spike y abre frentes (Iris) y tecnologías externas (William)">🚀 Empezar ciclo</button>
         <!-- SOLO dentro de una tarea: Ana Liz define los tests (en papel) y luego los escribe (código) -->
         <button class="tool tool-tarea" id="btnDefinirTests" disabled title="Ana Liz define los tests en papel (dado/cuando/entonces). Ciega al código; recibe el contexto seleccionado.">🎯 Definir tests</button>
         <button class="tool tool-tarea" id="btnEscribirTests" disabled title="Ana Liz convierte sus definiciones en tests REALES de código (con su ID). Necesita tests definidos.">⌨️ Escribir tests</button>
@@ -895,6 +898,7 @@
   const btnDiscutir = document.getElementById('btnDiscutir');
   const btnChallenge = document.getElementById('btnChallenge');
   const btnTarea = document.getElementById('btnTarea');
+  const btnEmpezarCiclo = document.getElementById('btnEmpezarCiclo');
   const btnResumir = document.getElementById('btnResumir');
   const btnDebug = document.getElementById('btnDebug');
   const btnDefinirTests = document.getElementById('btnDefinirTests');
@@ -1056,6 +1060,8 @@
     targetChip.classList.toggle('is-forge', target !== 'project');
     targetBranch.textContent = '⌥ ' + getBranch();
     cycleBarEl.classList.toggle('offline', !cycle);
+    // En "Nuevo ciclo" el botón "Crear tarea" se cambia por "Empezar ciclo".
+    syncCicloBtn();
 
     const avail = !!cycle;
     // El objetivo (forge/producto) y la rama SOLO se editan en la parada "Nuevo ciclo".
@@ -1064,8 +1070,12 @@
     targetChip.title = nuevoActive
       ? 'Clic para cambiar el objetivo (forge ⇄ producto). Iris abrirá la conversación del backlog de ese objetivo.'
       : 'El objetivo (forge/producto) solo se cambia en "Nuevo ciclo" (la flecha ◀ desde Spike).';
-    targetBranch.title = nuevoActive ? 'Clic para editar la rama del ciclo.' : '';
-    targetBranch.classList.toggle('editable', !!nuevoActive);
+    // La rama ya NO se edita a mano: la nombra Iris al empezar el ciclo (1-3 palabras
+    // del objetivo) y se crea de verdad en git. Aquí solo se muestra.
+    targetBranch.title = nuevoActive
+      ? 'La rama la nombra Iris al pulsar "Empezar ciclo" (1-3 palabras del objetivo) y se crea en git.'
+      : 'Rama git del ciclo.';
+    targetBranch.classList.remove('editable');
 
     // "Nuevo ciclo" como parada: resáltala cuando estás en ella (etiqueta de estado).
     gateNewBtn.classList.toggle('active', nuevoActive);
@@ -1080,10 +1090,18 @@
     btnPause.title = paused ? 'Reanudar el trabajo de la fase actual' : 'Pausar el trabajo de la fase actual';
   }
 
-  // El nombre de rama del ciclo es ajuste de la puerta "Nuevo ciclo"; aún no tiene
-  // backend, así que vive en localStorage (andamio honesto del Spike).
-  function getBranch() { return localStorage.getItem('forge.cycleBranch') || 'sin rama'; }
-  function setBranch(v) { localStorage.setItem('forge.cycleBranch', v || 'sin rama'); }
+  // La rama del ciclo vive en el backend (cycle.branch): la nombra Iris al "Empezar
+  // ciclo" y se crea de verdad en git. 'sin rama' hasta que exista.
+  function getBranch() { return (cycle && cycle.branch) || 'sin rama'; }
+
+  // En "Nuevo ciclo" el botón "Crear tarea" se oculta y aparece "Empezar ciclo"
+  // (mismo sitio en la barra del hilo). Fuera de esa parada, al revés.
+  function syncCicloBtn() {
+    if (!btnEmpezarCiclo) return;
+    btnEmpezarCiclo.style.display = nuevoActive ? '' : 'none';
+    btnTarea.style.display = nuevoActive ? 'none' : '';
+    btnEmpezarCiclo.disabled = !cycle;
+  }
 
   async function cycleDo(path) {
     try {
@@ -1124,14 +1142,12 @@
   };
   btnPause.onclick = () => cycleDo(cycle && cycle.paused ? 'resume' : 'pause');
   targetChip.onclick = toggleTarget;
-  // La rama del ciclo: editable SOLO en "Nuevo ciclo" (clic en el texto ⌥ <rama>).
+  // La rama del ciclo ya NO se edita a mano: la nombra Iris al "Empezar ciclo" y se
+  // crea en git. El clic solo recuerda de dónde sale.
   targetBranch.onclick = () => {
-    if (!nuevoActive) return;
-    const cur = getBranch() === 'sin rama' ? '' : getBranch();
-    const v = prompt('Nombre de la rama del ciclo:', cur);
-    if (v == null) return;
-    setBranch(v.trim());
-    renderCycle();
+    if (nuevoActive && getBranch() === 'sin rama') {
+      alert('La rama la nombra Iris al pulsar "Empezar ciclo" (1-3 palabras del objetivo) y se crea en git.');
+    }
   };
 
   // ── 👥 Equipo: la pestaña de perfiles ────────────────────────────────────────
@@ -3250,10 +3266,17 @@
     if (on) abrirBacklog((cycle && cycle.target) || 'forge');
   }
 
-  // ▶ desde "Nuevo ciclo" = EMPEZAR: confirma, exige el repo del objetivo limpio,
-  // borra el taller (salvo la conversación de Iris del objetivo) y arranca en Spike.
+  // El botón "🚀 Empezar ciclo" (y la flecha ▶) desde "Nuevo ciclo": confirma, exige
+  // el repo del objetivo limpio, borra el taller (salvo la conversación de Iris del
+  // objetivo) y arranca en Spike. Luego, en segundo plano, el servidor analiza la
+  // charla y abre los frentes (Iris) + las tecnologías (William) y crea la rama.
+  let empezandoCiclo = false;
   async function empezarCiclo() {
-    if (!confirm('Empezar el ciclo BORRA el taller (todas las tareas y conversaciones, salvo la de Iris del objetivo) y arranca en Spike.\n\n¿Seguir?')) return;
+    if (empezandoCiclo) return;   // anti doble-clic: crea rama + muchas conversaciones
+    if (!confirm('Empezar el ciclo:\n\n• BORRA el taller (todas las tareas y conversaciones, salvo la charla de Iris del objetivo).\n• Analiza la conversación, CREA la rama del ciclo (1-3 palabras) y pasa a Spike.\n• Iris abre los frentes por donde atacar y William sugiere tecnologías externas.\n\n¿Seguir?')) return;
+    empezandoCiclo = true;
+    if (btnEmpezarCiclo) btnEmpezarCiclo.disabled = true;
+    try {
     const res = await fetch('/api/cycle/empezar', { method: 'POST' });
     if (res.status === 409) {
       const j = await res.json();
@@ -3269,7 +3292,28 @@
     await loadList();
     loadTareas();
     if (j.chat) openChat(j.chat.id);
+    // los frentes/tecnologías y la rama llegan ASÍNCRONOS (los analistas tardan):
+    // refresca el ciclo y la lista durante unos minutos para verlos aparecer.
+    arrancarPollCiclo();
+    } finally {
+      empezandoCiclo = false;
+      syncCicloBtn();   // re-evalúa visibilidad/disabled del botón
+    }
   }
+
+  // Poller acotado tras "Empezar ciclo": cada 3s refresca /api/cycle (para ver la
+  // rama cuando Iris la decide) y la lista (para ver entrar frentes/tecnologías).
+  // Se apaga solo a los ~5 min. No es permanente: solo cubre el arranque del ciclo.
+  let cicloPollTimer = null;
+  function arrancarPollCiclo(durMs) {
+    if (cicloPollTimer) clearInterval(cicloPollTimer);
+    const stopAt = Date.now() + (durMs || 5 * 60 * 1000);
+    cicloPollTimer = setInterval(async () => {
+      try { await loadCycle(); if (!nuevoActive) await loadList(); } catch {}
+      if (Date.now() > stopAt) { clearInterval(cicloPollTimer); cicloPollTimer = null; }
+    }, 3000);
+  }
+  if (btnEmpezarCiclo) btnEmpezarCiclo.onclick = () => empezarCiclo();
 
   document.getElementById('newChat').onclick = async () => {
     const res = await fetch('/api/chats', {

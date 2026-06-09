@@ -36,7 +36,7 @@ export const PHASES = [
 // La línea recta (lo que se pinta en la miga de pan). Hot Fix queda fuera.
 export const LINEAR_PHASES = PHASES.filter((p) => !p.branch);
 
-export const DEFAULT_CYCLE = { cursor: 0, paused: false, target: 'forge' };
+export const DEFAULT_CYCLE = { cursor: 0, paused: false, target: 'forge', branch: null };
 
 // OBJETIVO del ciclo: sobre QUÉ se trabaja. Uno por ciclo, NUNCA los dos a la vez
 // (decisión de Tie). Lo saben todos los personajes (Miguel construye, Stevens
@@ -50,13 +50,23 @@ export function normalize(state) {
   if (cursor < 0) cursor = 0;
   if (cursor > LINEAR_PHASES.length - 1) cursor = LINEAR_PHASES.length - 1;
   const target = TARGETS.includes(s.target) ? s.target : 'forge';
-  return { cursor, paused: !!s.paused, target };
+  // La RAMA git del ciclo: la pone "Empezar ciclo" (1-3 palabras del objetivo, vía
+  // git checkout -b). Persiste hasta el próximo arranque. null = aún sin rama.
+  const branch = (typeof s.branch === 'string' && s.branch.trim()) ? s.branch.trim() : null;
+  return { cursor, paused: !!s.paused, target, branch };
 }
 
 // Cambia el objetivo del ciclo (forge | project). Estado → estado (puro).
 export function setTarget(state, target) {
   const s = normalize(state);
   return { ...s, target: TARGETS.includes(target) ? target : s.target };
+}
+
+// Fija (o borra, con null) la rama git del ciclo. Estado → estado (puro).
+export function setBranch(state, branch) {
+  const s = normalize(state);
+  const b = (typeof branch === 'string' && branch.trim()) ? branch.trim() : null;
+  return { ...s, branch: b };
 }
 
 // La miga de pan con la fase actual entre [corchetes] (= "iluminada").
@@ -73,6 +83,7 @@ export function publicState(state) {
     cursor: s.cursor,
     paused: s.paused,
     target: s.target,
+    branch: s.branch,
     phases: LINEAR_PHASES.map((p) => ({ key: p.key, label: p.label })),
     breadcrumb: breadcrumb(s),
   };
