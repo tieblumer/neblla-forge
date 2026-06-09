@@ -120,6 +120,16 @@
     border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
   .um-fee input:focus { outline: none; border-color: var(--accent); }
   .um-sub-mult { font-weight: 700; color: #2ec16a; }
+  /* desglose por personaje: % de ventana por mensaje */
+  .um-personas { margin-top: 12px; }
+  .um-personas-cap { font-size: 12px; color: var(--text); font-weight: 600; margin-bottom: 7px; }
+  .um-personas-cap span { color: var(--muted); font-weight: 400; }
+  .um-persona { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 8px; margin: 4px 0; }
+  .up-name { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .up-bar { height: 7px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+  .up-fill { display: block; height: 100%; background: var(--secondary); }
+  .up-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .up-meta b { color: var(--text); font-weight: 600; }
   .bar-left { flex-direction: row; align-items: center; gap: 8px; }
   .bar-center { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
 
@@ -3517,6 +3527,31 @@
       + fmtMoney(s.last30d) + '</b> · total <b>' + fmtMoney(s.totalCost) + '</b>';
     el.appendChild(g);
 
+    // desglose por PERSONAJE: cuánto % de la ventana se come cada mensaje (para optimizar)
+    if (Array.isArray(s.personas) && s.personas.length) {
+      const pt = document.createElement('div'); pt.className = 'um-personas';
+      const cap = document.createElement('div'); cap.className = 'um-personas-cap';
+      cap.innerHTML = '% de ventana por mensaje <span>(últimos ' + (s.personasDias || 30) + ' días — el más caro arriba)</span>';
+      pt.appendChild(cap);
+      // escala la barrita al personaje más caro POR MENSAJE
+      const maxAvg = s.personas.reduce((m, p) => Math.max(m, p.avgPctWindow || 0), 0) || 1;
+      for (const p of s.personas) {
+        const row = document.createElement('div'); row.className = 'um-persona';
+        const name = document.createElement('span'); name.className = 'up-name'; name.textContent = nameOf(p.agente);
+        const bar = document.createElement('span'); bar.className = 'up-bar';
+        const fill = document.createElement('span'); fill.className = 'up-fill';
+        fill.style.width = Math.min(100, ((p.avgPctWindow || 0) / maxAvg) * 100) + '%';
+        bar.appendChild(fill);
+        const meta = document.createElement('span'); meta.className = 'up-meta';
+        const perMsg = p.avgPctWindow != null ? '<b>' + p.avgPctWindow.toFixed(2) + '%</b>/msg' : fmtMoney(p.avgCostUsd) + '/msg';
+        const total = p.totalPctWindow != null ? p.totalPctWindow.toFixed(1) + '% total' : fmtMoney(p.totalCostUsd) + ' total';
+        meta.innerHTML = perMsg + ' · ' + p.count + ' msgs · ' + total;
+        row.appendChild(name); row.appendChild(bar); row.appendChild(meta);
+        pt.appendChild(row);
+      }
+      el.appendChild(pt);
+    }
+
     // cuota mensual editable → múltiplo de subvención (30d consumido / cuota)
     const fee = document.createElement('div'); fee.className = 'um-fee';
     const lbl = document.createElement('span'); lbl.textContent = 'Tu cuota mensual: $';
@@ -3553,9 +3588,10 @@
     };
 
     const note = document.createElement('div'); note.className = 'um-sub-note';
-    note.textContent = 'El valor del 100 % es una COTA INFERIOR: si usas la misma suscripción en '
-      + 'sesiones interactivas a la vez, mueven la ventana sin contar en el log del forge, así que el '
-      + 'valor real es mayor. El "gasto API-equivalente" sí es exacto (lo reporta el CLI por trabajo).';
+    note.textContent = 'El valor del 100 % se calibra contra TU uso real: la ventana la mueve todo lo que '
+      + 'corra a la vez (forge + tus sesiones en paralelo), así que el número refleja tu manera de '
+      + 'trabajar, no un ideal de un solo hilo. El % por personaje usa ese valor para traducir el coste '
+      + 'de cada mensaje a cuánta ventana se come — cuanto más rueda el calibrador, más preciso.';
     el.appendChild(note);
   }
 

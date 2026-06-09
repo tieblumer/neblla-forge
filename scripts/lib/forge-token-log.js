@@ -68,6 +68,28 @@ export function sumCostUsd(rows, { sinceTs = null } = {}) {
   return total;
 }
 
+// Desglosa el coste por PERSONAJE (campo `agente`), opcionalmente desde `sinceTs`.
+// Para cada uno: nº de lanzamientos, coste total y coste medio por lanzamiento (≈ por
+// mensaje). Ordenado por coste total desc (el candidato a optimizar primero). Pura.
+export function breakdownByAgente(rows, { sinceTs = null } = {}) {
+  const since = sinceTs ? Date.parse(sinceTs) : null;
+  const map = new Map();
+  for (const r of (Array.isArray(rows) ? rows : [])) {
+    if (!r || !r.agente) continue;
+    if (since != null) {
+      const t = Date.parse(r.ts);
+      if (Number.isFinite(t) && t < since) continue;
+    }
+    const cur = map.get(r.agente) || { agente: r.agente, count: 0, totalCostUsd: 0 };
+    cur.count += 1;
+    cur.totalCostUsd += Number(r.costUsd) || 0;
+    map.set(r.agente, cur);
+  }
+  const out = [...map.values()].map((x) => ({ ...x, avgCostUsd: x.count ? x.totalCostUsd / x.count : 0 }));
+  out.sort((a, b) => b.totalCostUsd - a.totalCostUsd);
+  return out;
+}
+
 // Filtra las filas de un `runId` y agrega sus totales. Función PURA (testable sin
 // servidor). Trata null/ausente como 0 en las sumas. Si no hay filas → totales a
 // 0 y requests vacío (nunca lanza).

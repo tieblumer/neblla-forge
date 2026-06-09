@@ -48,7 +48,7 @@ import { parsePlanBloque, normalizarPlan, validarPlan, planAPropuestaSubtareas, 
 import { parseTestsBloque, normalizarTestsPlan, fusionarTests, quitarTemporales, REF_GENERAL, aplicarResultadosCorrida, ensamblarTestFile } from './lib/forge-tests.js';
 import { sellarTestIds, testIdsParaSubtarea } from './lib/forge-testids.js';
 import { resolveProjectRoot } from './lib/target.js';
-import { logTokenUsage, extractUsage, parseCliResult, readTokenLog, summarizeRun, chooseCostTargets, sumCostUsd } from './lib/forge-token-log.js';
+import { logTokenUsage, extractUsage, parseCliResult, readTokenLog, summarizeRun, chooseCostTargets, sumCostUsd, breakdownByAgente } from './lib/forge-token-log.js';
 import * as subsidy from './lib/forge-subsidy.js';
 import { listPeople, readPerson, writePerson, findByRol } from './lib/forge-people.js';
 import {
@@ -149,21 +149,27 @@ function vozDe(author) {
 //   • escribir incluye codigo → Write, Edit, Bash (manos de escribir ficheros)
 //   • herramientas MCP        → mcp__forge__<cada una> (contestar / preguntar…)
 // Si el empleado no tiene ficha, una base segura de solo lectura + contestar.
-// ¿el empleado puede LEER el código? (scope.lee !== 'nada' → recibe Read/Grep/Glob).
-// El prompt lo usa para no prometerle ojos que no tiene (si no, alucina código).
+// ¿el empleado puede LEER el CÓDIGO en crudo? Solo 'codigo' / 'todo' / lista de rutas.
+// 'backbone' NO cuenta (lee la documentación, no el código) y 'nada' tampoco. El prompt
+// lo usa para no prometerle ojos que no tiene (si no, alucina código).
 function puedeLeerCodigo(author) {
   const p = author ? findByRol(FORGE_DIR, author) : null;
-  return !!(p && p.scope && p.scope.lee && p.scope.lee !== 'nada');
+  const lee = p && p.scope && p.scope.lee;
+  return !!(lee && lee !== 'nada' && lee !== 'backbone');
 }
+// Las herramientas MCP de SOLO backbone (documentación), sin tocar el código.
+const BACKBONE_TOOLS = ['mcp__forge__backbone_resumen', 'mcp__forge__backbone_completo', 'mcp__forge__leer_feature'];
 function allowedToolsFor(author) {
   const p = author ? findByRol(FORGE_DIR, author) : null;
   if (!p) return 'Read,Grep,Glob,mcp__forge__contestar';
   const tools = [];
   const lee = Array.isArray(p.scope.lee) ? (p.scope.lee.length ? 'algo' : 'nada') : p.scope.lee;
-  if (lee && lee !== 'nada') tools.push('Read', 'Grep', 'Glob');
+  // 'backbone' = SOLO la documentación (MCP); NUNCA el código crudo (Read/Grep/Glob).
+  if (lee === 'backbone') tools.push(...BACKBONE_TOOLS);
+  else if (lee && lee !== 'nada') tools.push('Read', 'Grep', 'Glob');
   if ((p.scope.escribe || []).includes('codigo')) tools.push('Write', 'Edit', 'Bash');
   for (const t of (p.herramientas || [])) tools.push('mcp__forge__' + t);
-  return tools.join(',');
+  return [...new Set(tools)].join(',');
 }
 
 // Lo que se intercala en los args del lanzamiento de claude: ['--model', alias] o []
@@ -275,8 +281,8 @@ function analisisCicloIrisPrompt(target, convText) {
     '',
     'Tu trabajo: leerla entera y decidir QUÉ vamos a hacer este ciclo. Importante: cuando la',
     'visión técnica y la letra de lo que pidió el CEO no coincidan, MANDA el criterio técnico',
-    '(el del que va a construir) — esa es la opinión que más cuenta. Puedes mirar el código real',
-    '(Read/Grep/Glob) si lo necesitas para decidir con fundamento.',
+    '(el del que va a construir) — esa es la opinión que más cuenta. Puedes consultar el BACKBONE',
+    '(resumen, completo o una feature) para aterrizar; NO tienes acceso al código en crudo.',
     '',
     'Entrega tu decisión con la herramienta `plan_ciclo`:',
     '  • `rama`: de 1 a 3 palabras que resuman el OBJETIVO GENERAL del ciclo (será el nombre de la rama git).',
@@ -1245,7 +1251,7 @@ async function subsidyTick() {
 // El veredicto: valor API del 100 % de la ventana (calibrado), gasto API-equivalente
 // (7d/30d/total), proyección del ciclo actual, y —si hay cuota configurada— el
 // múltiplo de subvención (lo que consumes en API frente a lo que pagas).
-app.get('/api/subsidy', async (_req, res) => {
+app.get('/api/subsidy', async (req, res) => {
   const state = subsidy.normalizeSubsidy(readSubsidy(ROOT) || {});
   const est = subsidy.estimateSubsidy(state);
   const rows = readTokenLog(ROOT);
@@ -1268,11 +1274,24 @@ app.get('/api/subsidy', async (_req, res) => {
   } catch { /* sin ciclo si el endpoint de uso falla */ }
   const fee = state.feeMonthlyUsd;
   const subsidyMultiple = (fee && fee > 0) ? last30d / fee : null;
+  // desglose por PERSONAJE (últimos `dias`, def. 30): coste medio por mensaje → % de
+  // la ventana de 5h, usando el valor calibrado del 100 %. Para optimizar: ver qué
+  // personaje se come más ventana por mensaje y cuál en total.
+  const dias = Math.max(1, Math.min(365, Number(req.query && req.query.dias) || 30));
+  const desde = new Date(now - dias * 24 * 60 * 60 * 1000).toISOString();
+  const vp = est.valuePer100;
+  const personas = breakdownByAgente(rows, { sinceTs: desde }).map((p) => ({
+    agente: p.agente, count: p.count,
+    avgCostUsd: p.avgCostUsd, totalCostUsd: p.totalCostUsd,
+    avgPctWindow: (vp && vp > 0) ? (p.avgCostUsd / vp) * 100 : null,
+    totalPctWindow: (vp && vp > 0) ? (p.totalCostUsd / vp) * 100 : null,
+  }));
   res.json({
     valuePer100: est.valuePer100, sampleCount: est.sampleCount,
     observedPct: est.observedPct, observedCost: est.observedCost,
     cycle, totalCost, last30d, last7d,
     feeMonthlyUsd: fee, subsidyMultiple,
+    personas, personasDias: dias,
   });
 });
 
@@ -2729,7 +2748,7 @@ function arrancarAnalisisCiclo(keepChatId) {
     cwd: repoRoot,
     timeoutMs: 10 * 60 * 1000,
     prompt: analisisCicloIrisPrompt(tgt, convText),
-    allowedTools: 'Read,Grep,Glob,mcp__forge__plan_ciclo',
+    allowedTools: 'mcp__forge__backbone_resumen,mcp__forge__backbone_completo,mcp__forge__leer_feature,mcp__forge__plan_ciclo',
     extraEnv: { FORGE_AUTHOR: 'iris', FORGE_MSG_TYPE: 'frente' },
     onDone: () => {
       const plan = readCyclePlan(ROOT, 'plan');
@@ -2762,7 +2781,7 @@ function arrancarAnalisisCiclo(keepChatId) {
     cwd: repoRoot,
     timeoutMs: 10 * 60 * 1000,
     prompt: analisisCicloWilliamPrompt(tgt, convText),
-    allowedTools: 'Read,Grep,Glob,WebSearch,mcp__forge__tech_ciclo',
+    allowedTools: 'WebSearch,mcp__forge__tech_ciclo',
     extraEnv: { FORGE_AUTHOR: 'william', FORGE_MSG_TYPE: 'tech' },
     onDone: () => {
       const tech = readCyclePlan(ROOT, 'tech');
