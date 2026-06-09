@@ -156,8 +156,12 @@
     user-select: none;
   }
   .col-center { position: relative; }
-  /* "Nuevo ciclo" parado = etiqueta de estado resaltada (igual que una fase activa). */
-  .gate-stop.active { color: #fff; border-color: var(--gate); background: var(--gate); }
+  /* "Nuevo ciclo" parado = etiqueta de estado resaltada, con el MISMO rosa-neblla que
+     una fase activa (.bc-phase.active) — no el dorado de --gate. */
+  .gate-stop.active {
+    color: var(--accent-ink); background: var(--accent); border-color: var(--accent);
+    box-shadow: 0 0 14px rgba(255,0,102,.35);
+  }
 
   /* pie del carril: el combo de modelos, abajo-derecha pero DENTRO del carril */
   .rail-foot { display: flex; align-items: center; gap: 6px; align-self: flex-end; }

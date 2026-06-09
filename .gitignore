@@ -9,6 +9,9 @@ node_modules
 # solo generarían ruido. Cada sprint arranca limpio. Viven solo en el working tree.
 forge/sprint/chats/
 forge/sprint/cycle.json
+# las TAREAS también son efímeras (la forja las crea y las borra: "Empezar" barre el
+# taller, y se borran solas en el rewind del grooming). Como los chats: nunca a git.
+forge/sprint/tareas/
 # pantallazos pegados en el chat (working-tree only, como las conversaciones).
 pantallazos/
 # contador de tokens (scripts/forge-token-log.js): registro de gasto por spawn,

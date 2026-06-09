@@ -30,3 +30,12 @@ dentro de `forge/`. (Pendiente otro día: alinear `project/` al mismo patrón.)
 - El **enlace** abre **el backlog dentro de la propia forja** (un visor de markdown nuevo) y
   **lleva el scroll hasta el ancla** que escribió Anselmo. Un clic y estás justo donde quedó.
 - Requiere: un visor de backlog in-app (renderiza el `BACKLOG.md` y salta a un ancla).
+
+## Material efímero del forge (no va a git)
+
+- Chats, `cycle.json` y **tareas** son efímeros: viven solo en el working tree, nunca en git
+  (`.gitignore`). La forja los crea y los borra como parte de su trabajo normal.
+- **Las tareas deberían borrarse solas al final del grooming**, en el **rewind de los cambios**:
+  ahí se tira el código exploratorio y nos quedamos SOLO con los tres destilados —
+  **la documentación de Anselmo, los tests de Ana Liz y el plan de implementación de Lina**.
+  (Hoy "Empezar" también las barre al arrancar; el rewind del grooming es el otro momento.)
